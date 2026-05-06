@@ -25,6 +25,11 @@
     let logHistory = []; // 儲存歷史訊息
     let logContainer; // 用於控制捲動
 
+    let gameStartTime = Date.now();
+    let totalSuccessfulWords = 0;
+    let finalResults = { time: 0, wpm: 0 };
+    let bossTimer = null; // 用於追蹤 Boss 生成的定時器
+
     // 修改：支援多片段日誌，實現局部高亮
     function addLog(content, tier = 'system', highlight = null) {
       let segments = [];
@@ -97,6 +102,8 @@
     let burstMaxTime; // 從 config 載入
     let comboDisplayTimeout; // 用於控制連擊數顯示的定時器
     let comboCount = 0;
+    let burstStartTime = 0;
+    let currentWpm = 0;
     let currentTarget = null;
     let burstInterval;
 
@@ -112,6 +119,10 @@
             gamePaused: "Game Paused",
             continueGame: "Continue Game (ESC)",
             restartGame: "Restart Game",
+            victory: "Victory!",
+            clearTime: "Clear Time",
+            avgWpm: "Average WPM",
+            seconds: "s",
             mpNotEnough: (cost) => `Not enough MP! Skill requires ${cost} MP.`,
             skillActivated: "Skill activated! Combo damage increased by 2x!",
             targetingPrompt: "Enter the word above the monster to target...",
@@ -155,6 +166,10 @@
             gamePaused: "遊戲暫停",
             continueGame: "繼續遊戲 (ESC)",
             restartGame: "重新開始遊戲",
+            victory: "戰鬥勝利！",
+            clearTime: "通關時間",
+            avgWpm: "平均速度",
+            seconds: "秒",
             mpNotEnough: (cost) => `MP 不足！發動技能需要 ${cost} 點 MP。`,
             skillActivated: "發動技能！連擊傷害提升為 2 倍！",
             targetingPrompt: "請輸入怪物頭上的單字來鎖定目標...",
@@ -403,6 +418,10 @@
     }
 
     function restartGame() {
+      if (bossTimer) clearTimeout(bossTimer); // 強制清除尚未觸發的 Boss 生成
+      gameState = 'BATTLE'; // 重置遊戲狀態
+      gameScore = 0;
+      isBossMode = false;
       enemies = []; // 清空現有怪物，防止 ID 累加與排版錯誤
       player = {
         hp: gameConfig.playerInitialHp, maxHp: gameConfig.playerInitialHp, 
@@ -413,12 +432,13 @@
         lastDamage: 0
       };
       spawnMonsters();
-      gameState = 'BATTLE'; // 重置遊戲狀態
-      gameScore = 0;
-      isBossMode = false;
       addLog(t('gameRestarted'));
+      gameStartTime = Date.now();
+      totalSuccessfulWords = 0;
+      finalResults = { time: 0, wpm: 0 };
       selectedMonsterId = null; // spawnMonsters會重新設定
       comboCount = 0;
+      currentWpm = 0;
       if (burstInterval) clearInterval(burstInterval);
       currentWordInput = ""; // 重置輸入框內容
       currentWordIndex = 0; // 重置當前單字索引
@@ -535,6 +555,8 @@
       comboCount = 0;
       currentComboDisplayCount = 0;
       showComboDisplay = true; // Burst Mode 開始即顯示
+      burstStartTime = Date.now();
+      currentWpm = 0;
       currentWordInput = "";
       currentWordIndex = 0;
       visibleWordsStartIndex = 0;
@@ -544,6 +566,12 @@
       burstInterval = setInterval(() => {
         if (gameState !== 'PAUSED') { // 暫停時停止倒數
           burstTimeLeft -= 100;
+          
+          // 即時計算 WPM (Words Per Minute)
+          const elapsedSeconds = (Date.now() - burstStartTime) / 1000;
+          if (elapsedSeconds > 0.5) { // 稍微延遲後再顯示以避免初始數值過大
+            currentWpm = Math.round((comboCount / elapsedSeconds) * 60);
+          }
         }
         if (burstTimeLeft <= 0 || currentWordIndex >= currentBurstWords.length) {
           endBurst();
@@ -552,17 +580,22 @@
     }
   
     function generateBurstWords() {
+      currentBurstWords = [];
+      addBurstWords(gameConfig.typingConfig?.initialWordPoolSize || 50);
+    }
+
+    function addBurstWords(count) {
       const poolKey = currentTarget?.wordType;
       const pool = dictionaries[poolKey];
       if (!pool || pool.length === 0) {
-        currentBurstWords = ["error"];
+        if (currentBurstWords.length === 0) currentBurstWords = ["error"];
         return;
       }
       
-      const poolSize = gameConfig.typingConfig?.initialWordPoolSize || 50;
-      currentBurstWords = Array.from({ length: poolSize }, () => 
+      const newWords = Array.from({ length: count }, () => 
         pool[Math.floor(Math.random() * pool.length)].toLowerCase()
       );
+      currentBurstWords = [...currentBurstWords, ...newWords];
     }
   
     function handleCorrectWord() {
@@ -578,6 +611,7 @@
         // 移除原有的 setTimeout 邏輯，讓顯示狀態由 endBurst 統一關閉
 
         comboCount++;
+        totalSuccessfulWords++;
         currentWordInput = "";
         
         // 觸發玩家攻擊特效
@@ -615,13 +649,25 @@
           // 檢查是否進入 Boss 房
           if (gameScore >= 100 && !isBossMode) {
             isBossMode = true;
-            const deadId = currentTarget.id;
             setTimeout(() => {
               enemies = [generateMonster(1, 'unique')];
               selectedMonsterId = enemies[0].id;
               addLog("--- BOSS ROOM ---", 'unique'); // Boss 訊息
             }, gameConfig.enemyRespawnDelay); // 等待最後一隻怪物的死亡動畫
-          } 
+          }
+          // 擊敗 Boss 結算邏輯 (檢查是否真的擊敗了 Unique 階級的 Boss)
+          else if (currentTarget.wordType === 'unique') {
+            const endTime = Date.now();
+            const totalSeconds = Math.max(1, (endTime - gameStartTime) / 1000);
+            finalResults = {
+              time: totalSeconds,
+              wpm: Math.round((totalSuccessfulWords / (totalSeconds / 60)))
+            };
+            gameState = 'VICTORY';
+            clearInterval(burstInterval); // 手動清除，不進入 resetTurn
+            showComboDisplay = false;
+            return;
+          }
           // 非 Boss 階段的重生邏輯
           else if (!isBossMode) {
             const deadId = currentTarget.id;
@@ -639,15 +685,22 @@
             // 如果還有怪物，自動切換到下一個目標（HP 最低者）
             currentTarget = aliveEnemies.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr));
             selectedMonsterId = currentTarget.id; // 確保黃色框立即移動到新目標
-            currentWordIndex++;
-            checkScroll();
+            moveToNextWord();
           } else {
             endBurst();
           }
         } else {
-          currentWordIndex++;
-          checkScroll();
+          moveToNextWord();
         }
+    }
+
+    function moveToNextWord() {
+      currentWordIndex++;
+      checkScroll();
+      // 檢查單字量是否足夠，少於 10 個就自動補貨
+      if (currentBurstWords.length - currentWordIndex < 10) {
+        addBurstWords(20);
+      }
     }
 
     function checkScroll() {
@@ -678,6 +731,7 @@
       currentWordInput = "";
       currentBurstWords = [];
       currentWordIndex = 0;
+      currentWpm = 0;
       visibleWordsStartIndex = 0;
       // 安全起見，確保結束時關閉
       showComboDisplay = false; 
@@ -706,13 +760,14 @@
           {gameState} {t} 
           onTogglePause={togglePause} 
           onRestart={restartGame}
+          {finalResults}
           {showLog}
           {showHelp}
           onToggleLog={() => showLog = !showLog}
           onToggleHelp={() => showHelp = !showHelp}
         />
 
-        <BattleScene {enemies} {player} {gameState} {selectedMonsterId} {t} {currentLanguage} {showComboDisplay} {currentComboDisplayCount} />
+        <BattleScene {enemies} {player} {gameState} {selectedMonsterId} {t} {currentLanguage} {showComboDisplay} {currentComboDisplayCount} {currentWpm} />
 
         <UIPanel 
           {gameState} {t} 

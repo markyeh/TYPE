@@ -8,6 +8,7 @@
   export let currentLanguage; // 接收 currentLanguage prop
   export let showComboDisplay; // 接收連擊數顯示狀態
   export let currentComboDisplayCount; // 接收當前連擊數
+  export let currentWpm = 0; // 接收即時 WPM
 
   // 計算當前選中怪物的索引，用於定位選擇框
   $: selectedIndex = enemies.findIndex(e => e.id === selectedMonsterId);
@@ -61,6 +62,7 @@
       <div class="combo-display">
         <div class="combo-number">{currentComboDisplayCount}</div>
         <div class="combo-text">HITS!</div>
+        <div class="wpm-text">{currentWpm} WPM</div>
       </div>
     {/if}
     
@@ -205,6 +207,14 @@
     color: #fff;
     font-weight: bold;
     letter-spacing: 2px;
+    text-shadow: 2px 2px 0px #000;
+  }
+
+  .wpm-text {
+    font-size: 1rem;
+    color: #3498db;
+    font-weight: bold;
+    margin-top: 5px;
     text-shadow: 2px 2px 0px #000;
   }
 

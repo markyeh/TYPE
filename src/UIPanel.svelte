@@ -137,7 +137,7 @@
     display: inline-flex;
     align-items: center;
   }
-  .word-item.typed { color: #444; }
+  .word-item.typed { color: #fff; }
   .word-item.current { color: #fff; }
   .word-item.pending { color: #666; }
 

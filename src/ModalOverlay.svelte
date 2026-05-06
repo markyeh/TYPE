@@ -7,13 +7,20 @@
   export let showHelp;
   export let onToggleLog;
   export let onToggleHelp;
+  export let finalResults = { time: 0, wpm: 0 };
 </script>
 
-{#if gameState === 'PAUSED' || gameState === 'GAME_OVER'}
+{#if gameState === 'PAUSED' || gameState === 'GAME_OVER' || gameState === 'VICTORY'}
   <div class="modal-overlay">
     <div class="modal-content">
       {#if gameState === 'GAME_OVER'}
         <h1 style="color: #fff;">{t('playerDefeated')}</h1>
+      {:else if gameState === 'VICTORY'}
+        <h1 class="victory-title">{t('victory')}</h1>
+        <div class="stats-container">
+          <p><span>{t('clearTime')}:</span> {finalResults.time.toFixed(1)}{t('seconds')}</p>
+          <p><span>{t('avgWpm')}:</span> {finalResults.wpm}</p>
+        </div>
       {:else}
         <h1>{t('gamePaused')}</h1>
         <button on:click={onTogglePause}>{t('continueGame')}</button>
@@ -60,6 +67,19 @@
     font-family: inherit; cursor: pointer; font-size: 1rem;
   }
   .modal-content button:hover { background: #fff; color: #000; }
+
+  .victory-title {
+    color: #f1c40f;
+    text-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+  }
+  .stats-container {
+    margin: 20px 0;
+    color: #fff;
+    font-size: 1.2rem;
+  }
+  .stats-container span { color: #aaa; margin-right: 10px; }
 
   .menu-options {
     display: flex;
