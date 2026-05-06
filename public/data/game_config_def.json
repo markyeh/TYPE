@@ -24,14 +24,9 @@
   "maxEnemies": 4,
   "enemyRespawnDelay": 1000,
   "wordDictionaries": {
-    "white": "data/monkeytype_english.json",
-    "magic": "data/monkeytype_english.json",
-    "rare": "data/monkeytype_english.json",
-    "unique": "data/monkeytype_english.json"
-  },
-  "typingConfig": {
-    "wordsPerLine": 12,
-    "linesToDisplay": 2,
-    "initialWordPoolSize": 50
+    "white": "data/words_white.json",
+    "magic": "data/words_magic.json",
+    "rare": "data/words_rare.json",
+    "unique": "data/words_unique.json"
   }
 }

@@ -1,12 +1,28 @@
 <script>
+  import { onMount, afterUpdate } from 'svelte';
   export let gameState;
   export let t;
   export let burstTimeLeft;
   export let burstMaxTime;
-  export let comboCount;
-  export let currentBurstWord;
-  export let burstInput;
   export let burstBonusText; // 接收獎勵文字
+  
+  // Monkeytype 相關 props
+  export let currentBurstWords = [];
+  export let currentWordInput = "";
+  export let currentWordIndex = 0;
+  export let visibleWordsStartIndex = 0;
+  export let wordsPerLine = 8;
+  export let linesToDisplay = 2;
+  export let comboCount;
+
+  let inputEl;
+
+  // 當進入 BURST 模式或更新時，強制聚焦輸入框
+  afterUpdate(() => {
+    if (gameState === 'BURST' && inputEl && document.activeElement !== inputEl) {
+      inputEl.focus();
+    }
+  });
 </script>
 
 <div class="ui-panel">
@@ -28,16 +44,45 @@
             <span class="bonus-hint">{burstBonusText}</span>
           {/if}
         </div>
-        <div class="burst-word">
-          {t('burstPrompt')}
-          <span class="word-display">
-            {#each currentBurstWord.split('') as char, i}
-              <span class="letter" 
-                class:correct={burstInput[i]?.toLowerCase() === char} 
-                class:incorrect={burstInput[i] !== undefined && burstInput[i]?.toLowerCase() !== char} 
-                class:pending={burstInput[i] === undefined}>{char}</span>
+        <div class="word-display-container" style="--lines-to-display: {linesToDisplay}; --line-height-val: 1.3em; --row-gap: 0.3em;">
+          <div class="word-lines" style="transform: translateY(calc(-1 * (var(--line-height-val) + var(--row-gap)) * {Math.floor(currentWordIndex / wordsPerLine)}))">
+            {#each currentBurstWords as word, i (i)}
+              <span class="word-item" 
+                class:typed={i < currentWordIndex}
+                class:current={i === currentWordIndex}
+                class:pending={i > currentWordIndex}
+              >
+                {#if i === currentWordIndex}
+                  {#each word.split('') as char, charIndex (charIndex)}
+                    {#if charIndex === currentWordInput.length}
+                      <span class="caret">|</span>
+                    {/if}<span class="letter" 
+                      class:correct={currentWordInput[charIndex]?.toLowerCase() === char} 
+                      class:incorrect={currentWordInput[charIndex] !== undefined && currentWordInput[charIndex]?.toLowerCase() !== char} 
+                      class:pending={currentWordInput[charIndex] === undefined}>{char}</span>{/each}
+                  {#if currentWordInput.length >= word.length}
+                    <span class="caret">|</span>
+                  {/if}
+                {:else}
+                  {word}
+                {/if}
+                {#if i < currentBurstWords.length - 1 && (i + 1) % wordsPerLine !== 0}
+                  <span class="word-space"> </span>
+                {/if}
+              </span>
             {/each}
-          </span>
+          </div>
+          <input 
+            type="text" 
+            class="hidden-input" 
+            bind:this={inputEl}
+            bind:value={currentWordInput} 
+            autocomplete="off" 
+            spellcheck="false" 
+            maxlength={currentBurstWords[currentWordIndex]?.length || 0}
+            disabled={gameState !== 'BURST'}
+            on:keydown={(e) => { if(e.key === ' ') e.preventDefault(); }}
+          />
         </div>
       </div>
     {/if}
@@ -63,8 +108,61 @@
   .bonus-hint { color: #f1c40f; margin-left: 8px; animation: floatUp 0.8s ease-out forwards; position: absolute; }
   @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
   .burst-word .word-display { font-size: 1.6rem; font-weight: bold; }
-  .letter.correct { color: #fff; text-decoration: underline; }
-  .letter.incorrect { color: #ff4d4d; text-decoration: underline; font-weight: 900; }
+  .letter.correct { color: #fff; }
+  .letter.incorrect { color: #ff4d4d; font-weight: 900; }
   .letter.pending { color: #666; }
   .combo { font-size: 1rem; color: #fff; }
+
+  .word-display-container {
+    position: relative;
+    height: calc((var(--line-height-val) * var(--lines-to-display)) + (var(--row-gap) * (var(--lines-to-display) - 1)) + 4px);
+    overflow: hidden;
+    font-size: 1.5rem;
+    line-height: var(--line-height-val);
+    margin-top: 10px;
+    background: rgba(0,0,0,0.3);
+    padding: 2px 15px;
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  .word-lines {
+    transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--row-gap) 0.6em;
+    will-change: transform;
+  }
+  .word-item { 
+    color: #666; 
+    display: inline-flex;
+    align-items: center;
+  }
+  .word-item.typed { color: #444; }
+  .word-item.current { color: #fff; }
+  .word-item.pending { color: #666; }
+
+  .caret {
+    color: #f1c40f;
+    display: inline-block;
+    width: 0;
+    overflow: visible;
+    position: relative;
+    left: -1px;
+    font-weight: normal;
+    animation: caretBlink 1s infinite;
+    pointer-events: none;
+  }
+
+  @keyframes caretBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  
+  .hidden-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    top: 0;
+    left: 0;
+  }
 </style>

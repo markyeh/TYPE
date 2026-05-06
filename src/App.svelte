@@ -87,9 +87,11 @@
       lastLoggedMonsterId = null;
     }
 
-    let targetInput = "";
-    let burstInput = "";
-    let currentBurstWord = "";
+    // Monkeytype 模式相關狀態
+    let currentBurstWords = []; 
+    let currentWordInput = ""; 
+    let currentWordIndex = 0;
+    let visibleWordsStartIndex = 0;
     let burstTimeLeft = 0;
     let burstBonusText = ""; // 新增：獎勵時間提示文字
     let burstMaxTime; // 從 config 載入
@@ -230,8 +232,7 @@
       try {
         const tiers = ['white', 'magic', 'rare', 'unique'];
         const fetchPromises = tiers.map(tier => {
-          // 新增 console.log 幫助確認實際載入的檔案路徑
-          const path = `data/words_${tier}.json`;
+          const path = gameConfig.wordDictionaries[tier]; // 從 gameConfig 讀取檔案路徑
           return fetch(path).then(res => {
             if (!res.ok) {
               throw new Error(`File not found: ${path} (HTTP ${res.status}). Please ensure the file exists in public/data/`);
@@ -417,10 +418,11 @@
       isBossMode = false;
       addLog(t('gameRestarted'));
       selectedMonsterId = null; // spawnMonsters會重新設定
-      targetInput = "";
-      burstInput = "";
       comboCount = 0;
       if (burstInterval) clearInterval(burstInterval);
+      currentWordInput = ""; // 重置輸入框內容
+      currentWordIndex = 0; // 重置當前單字索引
+      visibleWordsStartIndex = 0; // 重置可見單字起始索引
     }
 
     function clearLogs() {
@@ -508,14 +510,13 @@
           }
         }
       } else if (gameState === 'BURST') {
-        if (e.key === 'Backspace') {
-          burstInput = burstInput.slice(0, -1);
+        if (e.key === ' ') {
           e.preventDefault();
-        } else if (e.key.length === 1) {
-          burstInput += e.key;
-          e.preventDefault();
+          // 檢查當前輸入是否匹配目標單字 (去除空白後比對)
+          if (currentWordInput.trim().toLowerCase() === currentBurstWords[currentWordIndex].toLowerCase()) {
+            handleCorrectWord();
+          }
         }
-        handleBurstTyping();
       }
     }
   
@@ -534,33 +535,37 @@
       comboCount = 0;
       currentComboDisplayCount = 0;
       showComboDisplay = true; // Burst Mode 開始即顯示
+      currentWordInput = "";
+      currentWordIndex = 0;
+      visibleWordsStartIndex = 0;
       burstTimeLeft = gameConfig.burstMaxTime;
-      nextBurstWord();
+      generateBurstWords();
       
       burstInterval = setInterval(() => {
         if (gameState !== 'PAUSED') { // 暫停時停止倒數
           burstTimeLeft -= 100;
         }
-        if (burstTimeLeft <= 0) {
+        if (burstTimeLeft <= 0 || currentWordIndex >= currentBurstWords.length) {
           endBurst();
         }
       }, 100);
     }
   
-    function nextBurstWord() {
-      burstInput = "";
-      // 使用當前目標怪物的難度等級來決定單字庫
+    function generateBurstWords() {
       const poolKey = currentTarget?.wordType;
       const pool = dictionaries[poolKey];
       if (!pool || pool.length === 0) {
-        currentBurstWord = "error";
+        currentBurstWords = ["error"];
         return;
       }
-      currentBurstWord = pool[Math.floor(Math.random() * pool.length)].toLowerCase();
+      
+      const poolSize = gameConfig.typingConfig?.initialWordPoolSize || 50;
+      currentBurstWords = Array.from({ length: poolSize }, () => 
+        pool[Math.floor(Math.random() * pool.length)].toLowerCase()
+      );
     }
   
-    function handleBurstTyping() {
-      if (burstInput.toLowerCase() === currentBurstWord.toLowerCase()) {
+    function handleCorrectWord() {
         // 更新連擊數顯示
         // --- 每次成功連擊都增加時間 ---
         const bonusTime = gameConfig.comboBonusTime;
@@ -573,6 +578,7 @@
         // 移除原有的 setTimeout 邏輯，讓顯示狀態由 endBurst 統一關閉
 
         comboCount++;
+        currentWordInput = "";
         
         // 觸發玩家攻擊特效
         player.isAttacking = true;
@@ -633,13 +639,21 @@
             // 如果還有怪物，自動切換到下一個目標（HP 最低者）
             currentTarget = aliveEnemies.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr));
             selectedMonsterId = currentTarget.id; // 確保黃色框立即移動到新目標
-            nextBurstWord();
+            currentWordIndex++;
+            checkScroll();
           } else {
             endBurst();
           }
         } else {
-          nextBurstWord();
+          currentWordIndex++;
+          checkScroll();
         }
+    }
+
+    function checkScroll() {
+      const wordsPerLine = gameConfig.typingConfig?.wordsPerLine || 8;
+      if (currentWordIndex > 0 && currentWordIndex % wordsPerLine === 0) {
+        visibleWordsStartIndex = currentWordIndex;
       }
     }
   
@@ -661,8 +675,10 @@
       player.atb = 0;
       player.selectedAction = null;
       currentTarget = null; // 清除當前目標
-      targetInput = "";
-      burstInput = "";
+      currentWordInput = "";
+      currentBurstWords = [];
+      currentWordIndex = 0;
+      visibleWordsStartIndex = 0;
       // 安全起見，確保結束時關閉
       showComboDisplay = false; 
       if (comboDisplayTimeout) clearTimeout(comboDisplayTimeout);
@@ -701,8 +717,11 @@
         <UIPanel 
           {gameState} {t} 
           {burstTimeLeft} {burstMaxTime} 
-          {comboCount} {currentBurstWord} {burstInput} 
-          {burstBonusText}
+          {burstBonusText} {comboCount}
+          {currentBurstWords} bind:currentWordInput {currentWordIndex} 
+          {visibleWordsStartIndex}
+          wordsPerLine={gameConfig.typingConfig?.wordsPerLine || 8}
+          linesToDisplay={gameConfig.typingConfig?.linesToDisplay || 2}
         />
       </div>
     </main>
