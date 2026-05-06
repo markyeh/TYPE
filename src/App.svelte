@@ -1,37 +1,99 @@
 <script>
-    import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
+    import Header from './Header.svelte';
+    import LogViewer from './LogViewer.svelte';
+    import BattleScene from './BattleScene.svelte';
+    import ModalOverlay from './ModalOverlay.svelte';
+    import UIPanel from './UIPanel.svelte';
   
     // --- 遊戲資料定義 ---
+    let gameConfig = {}; // 儲存遊戲配置參數
     let dictionaries = {};
+    let monsterDb = null; // 儲存從 monster_db.json 讀取的資料
     let isLoaded = false;
 
     let gameState = 'BATTLE'; // BATTLE (ATB), ACTION_SELECT, TARGETING, BURST, GAME_OVER
     let previousState = 'BATTLE'; // 用於暫停後恢復
     let currentLanguage = 'en'; // 預設語言為英文
-    let devMode = true; // Dev 模式（無敵狀態）
-    let gameLog = ""; // 初始化為空，等待載入訊息
+    let showLog = false; // 預設關閉日誌
+    let gameScore = 0; // 當前地圖進度分數 (0-100)
+    let isBossMode = false; // 是否進入 Boss 房
+    let showComboDisplay = false; // 控制連擊數顯示 (這是 UI 狀態，非配置)
+    let currentComboDisplayCount = 0; // 當前連擊數
+    let showHelp = false; // 幫助說明顯示狀態
+    let devMode = false; // Dev 模式（無敵狀態），從 config 載入，先給個預設值
     let logHistory = []; // 儲存歷史訊息
     let logContainer; // 用於控制捲動
 
-    $: if (gameLog) {
-      logHistory = [...logHistory, gameLog].slice(-50);
+    // 修改：支援多片段日誌，實現局部高亮
+    function addLog(content, tier = 'system', highlight = null) {
+      let segments = [];
+      
+      if (tier === 'system') {
+        segments.push({ text: content, type: 'system' });
+      } else if (highlight && content.includes(highlight)) {
+        // 使用正規表達式切分字串，保留分隔符號（即 highlight 本身）
+        const escapedHighlight = highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const parts = content.split(new RegExp(`(${escapedHighlight})`, 'g'));
+        
+        parts.forEach(part => {
+          if (part === highlight) {
+            segments.push({ text: part, type: tier }); // 怪物名稱使用階級顏色
+          } else if (part) {
+            segments.push({ text: part, type: 'normal' }); // 其他文字使用白色
+          }
+        });
+      } else {
+        segments.push({ text: content, type: tier === 'info' ? 'normal' : 'system' });
+      }
+
+      const newEntry = { segments, id: Date.now() + Math.random() };
+      logHistory = [...logHistory, newEntry].slice(-50);
     }
     
     let player = {
       hp: 100, maxHp: 100, 
-      mp: 50, maxMp: 100, // 新增 MP 屬性
-      atb: 0, speed: 0.8, 
+      mp: 50, maxMp: 100, // 初始值，將在 onMount 中被 gameConfig 覆寫
+      atb: 0, speed: 0.8, // 初始值，將在 onMount 中被 gameConfig 覆寫
       isHit: false, isAttacking: false,
-      selectedAction: null
+      selectedAction: null,
+      lastDamage: 0
     };
   
     let enemies = [];
   
+    let selectedMonsterId = null;
+    let lastLoggedMonsterId = null;
+
+    // 自動鎖定目標邏輯：
+    // 當目前選中的怪物不存在、已死亡，或者怪物列表更新時，自動選擇 HP 最低的活著怪物
+    $: if (isLoaded && enemies.length > 0) {
+      const aliveEnemies = enemies.filter(e => e.hp > 0);
+      const currentSelected = enemies.find(e => e.id === selectedMonsterId);
+      if (aliveEnemies.length > 0 && (!currentSelected || currentSelected.hp <= 0)) {
+        selectedMonsterId = aliveEnemies.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr)).id;
+      }
+    }
+
+    // 當鎖定目標變動或進入行動選擇時，在 Log 顯示完整名稱
+    $: if (gameState === 'ACTION_SELECT' && selectedMonsterId !== lastLoggedMonsterId) {
+      const target = enemies.find(e => e.id === selectedMonsterId);
+      if (target) {
+        const fullName = target[`name_${currentLanguage}`] || target.name_en;
+        addLog(t('targetLocked', fullName), target.wordType, fullName);
+        lastLoggedMonsterId = selectedMonsterId;
+      }
+    } else if (gameState !== 'ACTION_SELECT') {
+      lastLoggedMonsterId = null;
+    }
+
     let targetInput = "";
     let burstInput = "";
     let currentBurstWord = "";
     let burstTimeLeft = 0;
-    let burstMaxTime = 5000; 
+    let burstBonusText = ""; // 新增：獎勵時間提示文字
+    let burstMaxTime; // 從 config 載入
+    let comboDisplayTimeout; // 用於控制連擊數顯示的定時器
     let comboCount = 0;
     let currentTarget = null;
     let burstInterval;
@@ -48,13 +110,14 @@
             gamePaused: "Game Paused",
             continueGame: "Continue Game (ESC)",
             restartGame: "Restart Game",
-            mpNotEnough: "Not enough MP! Skill requires 30 MP.",
+            mpNotEnough: (cost) => `Not enough MP! Skill requires ${cost} MP.`,
             skillActivated: "Skill activated! Combo damage increased by 2x!",
             targetingPrompt: "Enter the word above the monster to target...",
             devMode: "Dev Mode",
             burstPrompt: "TYPE:",
             burstPlaceholder: "Type fast!",
             comboEnd: (comboCount) => `Combo ended! Total ${comboCount} combos completed.`,
+            targetLocked: (name) => `Target locked: ${name}`,
             enemyDefeated: (enemyName) => `${enemyName} was defeated!`,
             gameRestarted: "Game restarted!",
             commonWords: "Common Words",
@@ -67,7 +130,15 @@
             hp: "HP",
             mp: "MP",
             atb: "ATB",
-            skillPlaceholder: "You cast a skill! (Skill effect to be implemented)",
+            helpTitle: "HOTKEYS / HELP",
+            helpLog: "[0] Toggle Log Window",
+            helpHelp: "[?] Toggle Help Overlay",
+            helpEsc: "[Esc] Menu / Pause",
+            helpTarget: "[H/L] or [Arrows] Select Target",
+            helpAttack: "[A] Attack / [S] Skill (30MP)",
+            helpItem: "[I] Item / [B] Block / [R] Run",
+            helpClose: "Press [?] or [Esc] to return",
+            skillPlaceholder: "You cast a skill!",
             blockAction: "You entered a defensive stance.",
             runAction: "Successfully escaped!",
             combo: "combo"
@@ -82,13 +153,14 @@
             gamePaused: "遊戲暫停",
             continueGame: "繼續遊戲 (ESC)",
             restartGame: "重新開始遊戲",
-            mpNotEnough: "MP 不足！發動技能需要 30 點 MP。",
+            mpNotEnough: (cost) => `MP 不足！發動技能需要 ${cost} 點 MP。`,
             skillActivated: "發動技能！連擊傷害提升為 2 倍！",
             targetingPrompt: "請輸入怪物頭上的單字來鎖定目標...",
             devMode: "開發者模式",
             burstPrompt: "輸入:",
             burstPlaceholder: "快打！",
             comboEnd: (comboCount) => `連擊結束！總共完成了 ${comboCount} 次連擊。`,
+            targetLocked: (name) => `已鎖定目標：${name}`,
             enemyDefeated: (enemyName) => `${enemyName} 被擊倒了！`,
             gameRestarted: "遊戲重新開始！",
             commonWords: "常用單字",
@@ -101,7 +173,15 @@
             hp: "HP",
             mp: "MP",
             atb: "ATB",
-            skillPlaceholder: "你施放了一個技能！ (待實作技能效果)",
+            helpTitle: "熱鍵 / 說明",
+            helpLog: "[0] 開啟/關閉日誌視窗",
+            helpHelp: "[?] 顯示/隱藏此說明",
+            helpEsc: "[Esc] 開啟選單 / 暫停",
+            helpTarget: "[H/L] 或 [方向鍵] 切換目標",
+            helpAttack: "[A] 攻擊 / [S] 技能 (30MP)",
+            helpItem: "[I] 道具 / [B] 防禦 / [R] 逃跑",
+            helpClose: "按下 [?] 或 [Esc] 返回遊戲",
+            skillPlaceholder: "你施放了一個技能！",
             blockAction: "你進入了防禦狀態。",
             runAction: "逃跑成功！",
             combo: "連擊"
@@ -117,12 +197,24 @@
     }
 
     // Set initial gameLog based on default language
-    gameLog = t('gameLogInitializing');
+    addLog(t('gameLogInitializing'));
   
     onMount(async () => {
+      await loadGameConfig(); // 確保 gameConfig 在其他依賴它的函數之前載入
       await loadAllDictionaries();
+      
+      // 初始化 devMode
+      devMode = gameConfig.initialDevMode;
+
+      // 使用 gameConfig 初始化玩家狀態
+      player.hp = gameConfig.playerInitialHp;
+      player.maxHp = gameConfig.playerInitialHp;
+      player.mp = gameConfig.playerInitialMp;
+      player.maxMp = gameConfig.playerInitialMp;
+      player.speed = gameConfig.playerSpeed; // 從 config 載入玩家速度
+      burstMaxTime = gameConfig.burstMaxTime; // 初始化 burstMaxTime
+      player = player; // 強制觸發 player 物件的反應性更新
       spawnMonsters();
-  
       const timer = setInterval(() => {
         if (isLoaded && gameState !== 'PAUSED' && gameState !== 'GAME_OVER') { // 暫停或結束時停止 ATB
           updateATB();
@@ -134,18 +226,12 @@
       };
     });
 
-    afterUpdate(() => {
-      // 自動捲動日誌到底部
-      if (gameState !== 'PAUSED' && logContainer) logContainer.scrollTop = logContainer.scrollHeight;
-    });
-
     async function loadAllDictionaries() {
       try {
         const tiers = ['white', 'magic', 'rare', 'unique'];
         const fetchPromises = tiers.map(tier => {
           // 新增 console.log 幫助確認實際載入的檔案路徑
           const path = `data/words_${tier}.json`;
-          console.log(`[loadAllDictionaries] Attempting to fetch: ${path}`);
           return fetch(path).then(res => {
             if (!res.ok) {
               throw new Error(`File not found: ${path} (HTTP ${res.status}). Please ensure the file exists in public/data/`);
@@ -174,42 +260,83 @@
           }
         });
 
+        // 載入怪物數據庫
+        const monsterRes = await fetch('data/monster_db.json');
+        if (monsterRes.ok) {
+            monsterDb = await monsterRes.json();
+        }
+
         isLoaded = true;
-        gameLog = t('gameLogLoaded');
-        logHistory = [gameLog]; // 初始化歷史
+        addLog(t('gameLogLoaded'));
       } catch (error) {
         console.error("Failed to load dictionaries:", error);
-        gameLog = t('gameLogError');
+        addLog(t('gameLogError'));
       }
+    }
+    
+    async function loadGameConfig() {
+      const res = await fetch('data/game_config.json');
+      gameConfig = await res.json();
+    }
+
+    // 隨機決定怪物階級 (60% White, 30% Magic, 10% Rare)
+    function getRandomTier() {
+      const rand = Math.random();
+      if (rand < 0.6) return 'white';
+      if (rand < 0.9) return 'magic';
+      return 'rare';
+    }
+
+    // 封裝單一怪物生成邏輯
+    function generateMonster(id, tier) {
+      const pool = dictionaries[tier] || ['error'];
+      const randomWord = pool[Math.floor(Math.random() * pool.length)];
+
+      const allAffixes = monsterDb ? [...monsterDb.affixes.prefixes, ...monsterDb.affixes.suffixes] : [];
+      const tierConfig = gameConfig.monsterTiers ? gameConfig.monsterTiers[tier] : null;
+      let name_en = tier.toUpperCase(), name_zh = tier.toUpperCase(), icon = tierConfig?.icon || '❓', nameParts = null;
+
+      if (monsterDb) {
+        const race = monsterDb.races[Math.floor(Math.random() * monsterDb.races.length)];
+        const basePool = monsterDb.monster_base_names[race.id];
+        const base = basePool[Math.floor(Math.random() * basePool.length)];
+        let affixCount = gameConfig.monsterTiers[tier].affixCount; // 從 config 讀取詞綴數量
+        const pickedAffixes = [...allAffixes].sort(() => 0.5 - Math.random()).slice(0, affixCount);
+        
+        const prefixEn = pickedAffixes.map(a => a.en).join(' ');
+        const prefixZh = pickedAffixes.map(a => a.zh).join('');
+
+        name_en = `${race.en}: ${prefixEn ? prefixEn + ' ' : ''}${base.en}`;
+        name_zh = `${race.zh}: ${prefixZh}${base.zh}`;
+        icon = base.icon;
+        nameParts = {
+          race: { en: race.en, zh: race.zh },
+          affixes: { en: prefixEn, zh: prefixZh },
+          base: { en: base.en, zh: base.zh }
+        };
+      }
+
+      return {
+        id, name_en, name_zh, word: randomWord, icon,
+        hp: tierConfig?.hp || 100, maxHp: tierConfig?.hp || 100,
+        mp: gameConfig.monsterInitialMp || 0, maxMp: gameConfig.monsterInitialMp || 0,
+        atb: Math.random() * 30, speed: tierConfig?.speed || 0.5,
+        wordType: tier, isAttacking: false, isTargetSuccess: false, lastDamage: 0,
+        nameParts: nameParts || { race: {en:'', zh:''}, affixes: {en:'', zh:''}, base: {en:tier.toUpperCase(), zh:tier.toUpperCase()} }
+      };
     }
 
     function spawnMonsters() {
-      const tiers = ['white', 'magic', 'rare', 'unique'];
-      const config = {
-        white:  { hp: 60,  speed: 0.3, icon: '👻', color: '#ffffff' },
-        magic:  { hp: 120, speed: 0.5, icon: '🔮', color: '#3498db' },
-        rare:   { hp: 250, speed: 0.7, icon: '💎', color: '#f1c40f' },
-        unique: { hp: 600, speed: 1.0, icon: '👑', color: '#9b59b6' }
-      };
-
-      enemies = tiers.map((tier, index) => {
-        const pool = dictionaries[tier] || ['error'];
-        const randomWord = pool[Math.floor(Math.random() * pool.length)];
-        return {
-          id: index + 1,
-          name: tier.toUpperCase(),
-          word: randomWord,
-          hp: config[tier].hp,
-          maxHp: config[tier].hp,
-          mp: 50, maxMp: 50,
-          atb: Math.random() * 30, // 隨機初始進度
-          speed: config[tier].speed,
-          wordType: tier,
-          icon: config[tier].icon,
-          isAttacking: false,
-          isTargetSuccess: false
-        };
-      });
+      if (isBossMode) {
+        enemies = [generateMonster(1, 'unique')];
+      } else { // 確保場上怪物數量不超過最大值
+        const currentEnemyCount = enemies.filter(e => e.hp > 0).length;
+        const enemiesToSpawn = gameConfig.maxEnemies - currentEnemyCount;
+        for (let i = 0; i < enemiesToSpawn; i++) {
+          const newId = Math.max(...enemies.map(e => e.id), 0) + 1; // 確保 ID 唯一
+          enemies = [...enemies, generateMonster(newId, getRandomTier())];
+        }
+      }
     }
   
     function updateATB() {
@@ -220,7 +347,7 @@
         if (player.atb >= 100) {
           player.atb = 100;
           gameState = 'ACTION_SELECT'; // 進入行動選擇狀態
-          gameLog = t('playerTurn');
+          addLog(t('playerTurn'), 'info');
         }
       }
   
@@ -228,18 +355,16 @@
       enemies = enemies.map(e => {
         if (e.hp > 0 && e.atb < 100) {
           e.atb += e.speed;
-          if (e.atb >= 100) enemyAttack(e.name);
+          if (e.atb >= 100) enemyAttack(e); // 改為傳遞整個物件
         }
         return e;
       });
     }
   
-    function enemyAttack(enemyName) {
-      const damage = 10;
-      const lowerName = enemyName.toLowerCase();
-      
-      const attacker = enemies.find(e => e.name === enemyName);
-      if (!attacker) return;
+    function enemyAttack(attacker) {
+      const damage = gameConfig.enemyBaseDamage;
+      // 根據當前語言選擇名稱
+      const currentName = attacker[`name_${currentLanguage}`] || attacker.name_en;
 
       // 觸發怪物攻擊特效
       attacker.isAttacking = true;
@@ -251,15 +376,17 @@
 
       // 觸發玩家受傷特效
       player.isHit = true;
+      player.lastDamage = damage;
       setTimeout(() => {
         attacker.isAttacking = false;
         player.isHit = false;
+        player.lastDamage = 0;
         enemies = enemies;
         player = player;
-      }, 400); // 攻擊動畫持續時間
+      }, 1000); // 延長時間讓傷害數值顯示
 
       attacker.atb = 0;
-      gameLog = t('enemyAttackLog', lowerName, damage);
+      addLog(t('enemyAttackLog', currentName, damage), attacker.wordType, currentName);
       if (player.hp <= 0) gameState = 'GAME_OVER';
     }
   
@@ -267,6 +394,7 @@
       if (gameState === 'GAME_OVER') return;
       if (gameState === 'PAUSED') {
         gameState = previousState;
+        showHelp = false;
       } else {
         previousState = gameState;
         gameState = 'PAUSED'; // 進入暫停狀態
@@ -274,17 +402,21 @@
     }
 
     function restartGame() {
+      enemies = []; // 清空現有怪物，防止 ID 累加與排版錯誤
       player = {
-        hp: 100, maxHp: 100, 
-        mp: 50, maxMp: 100,
-        atb: 0, speed: 0.8, isHit: false,
+        hp: gameConfig.playerInitialHp, maxHp: gameConfig.playerInitialHp, 
+        mp: gameConfig.playerInitialMp, maxMp: gameConfig.playerInitialMp,
+        atb: 0, speed: gameConfig.playerSpeed, isHit: false, // 使用 config 中的速度
         isAttacking: false,
-        selectedAction: null
+        selectedAction: null,
+        lastDamage: 0
       };
       spawnMonsters();
       gameState = 'BATTLE'; // 重置遊戲狀態
-      gameLog = t('gameRestarted');
-      logHistory = [gameLog];
+      gameScore = 0;
+      isBossMode = false;
+      addLog(t('gameRestarted'));
+      selectedMonsterId = null; // spawnMonsters會重新設定
       targetInput = "";
       burstInput = "";
       comboCount = 0;
@@ -293,11 +425,28 @@
 
     function clearLogs() {
       logHistory = [];
-      gameLog = ""; // 同步清除當前日誌狀態防止重複觸發
     }
 
     // --- 鍵盤監聽 ---
     function handleGlobalKeyDown(e) {
+      // 切換日誌 (熱鍵 0)
+      if (e.key === '0') {
+        showLog = !showLog;
+        return;
+      }
+
+      // 切換幫助 (熱鍵 ?)
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+        showHelp = !showHelp;
+        if (showHelp && gameState !== 'PAUSED') {
+          previousState = gameState;
+          gameState = 'PAUSED';
+        } else if (!showHelp && gameState === 'PAUSED' && previousState !== 'PAUSED') {
+          gameState = previousState;
+        }
+        return;
+      }
+
       if (e.key === 'Escape') {
         togglePause();
         return;
@@ -307,30 +456,57 @@
 
       if (gameState === 'ACTION_SELECT') {
         const key = e.key.toUpperCase(); // M 改為 S
-        if (['A', 'S', 'I', 'B', 'R'].includes(key)) {
-          if (key === 'S' && player.mp < 30) {
-            gameLog = t('mpNotEnough');
+        const aliveEnemies = enemies.filter(e => e.hp > 0);
+
+        // 處理選擇移動 (h/l 或 左右方向鍵)
+        if (aliveEnemies.length > 0) {
+          if (key === 'H' || key === 'ARROWLEFT') {
+            e.preventDefault();
+            const currentIndex = aliveEnemies.findIndex(m => m.id === selectedMonsterId);
+            const newIndex = (currentIndex - 1 + aliveEnemies.length) % aliveEnemies.length;
+            selectedMonsterId = aliveEnemies[newIndex].id;
             return;
           }
-          e.preventDefault(); // 阻止指令字元被輸入到接下來出現的輸入框中
+          if (key === 'L' || key === 'ARROWRIGHT') {
+            e.preventDefault();
+            const currentIndex = aliveEnemies.findIndex(m => m.id === selectedMonsterId);
+            const newIndex = (currentIndex + 1) % aliveEnemies.length;
+            selectedMonsterId = aliveEnemies[newIndex].id;
+            return;
+          }
+        }
+
+        if (['A', 'S', 'I', 'B', 'R'].includes(key)) {
+          if (key === 'S' && player.mp < 30) {
+            addLog(t('mpNotEnough', gameConfig.skillMpCost), 'info');
+            return;
+          }
+          e.preventDefault();
           player.selectedAction = key;
-          if (key === 'A' || key === 'S') { // M 改為 S
-            gameState = 'TARGETING';
-            targetInput = "";
-            gameLog = t('targetingPrompt');
+
+          if (key === 'A' || key === 'S') {
+            const target = aliveEnemies.find(m => m.id === selectedMonsterId);
+            if (target) {
+              target.isTargetSuccess = true;
+              enemies = enemies;
+
+              if (key === 'S') {
+                player.mp -= gameConfig.skillMpCost;
+                player = player;
+                addLog(t('skillActivated'), 'info');
+              }
+
+              currentTarget = target;
+              setTimeout(() => {
+                target.isTargetSuccess = false;
+                enemies = enemies;
+                startBurst();
+              }, 200);
+            }
           } else {
             executeQuickAction(key);
           }
         }
-      } else if (gameState === 'TARGETING') {
-        if (e.key === 'Backspace') {
-          targetInput = targetInput.slice(0, -1);
-          e.preventDefault();
-        } else if (e.key.length === 1) {
-          targetInput += e.key;
-          e.preventDefault();
-        }
-        checkTargeting();
       } else if (gameState === 'BURST') {
         if (e.key === 'Backspace') {
           burstInput = burstInput.slice(0, -1);
@@ -345,39 +521,20 @@
   
     // --- 動作處理 ---
     function executeQuickAction(action) {
-      if (action === 'B') gameLog = t('blockAction'); // 這裡可以加入防禦邏輯
+      if (action === 'B') addLog(t('blockAction'), 'info');
       if (action === 'S') {
-        gameLog = t('skillPlaceholder'); // 技能攻擊的佔位符
+        addLog(t('skillPlaceholder'), 'info');
       }
-      if (action === 'R') gameLog = t('runAction');
+      if (action === 'R') addLog(t('runAction'), 'info');
       resetTurn();
-    }
-  
-    function checkTargeting() {
-      const target = enemies.find(e => e.hp > 0 && e.word.toLowerCase() === targetInput.toLowerCase());
-      if (target) {
-        target.isTargetSuccess = true;
-        enemies = enemies;
-
-        if (player.selectedAction === 'S') {
-          player.mp -= 30;
-          player = player; // 確保 MP 變化即時反映在 UI 上
-          gameLog = t('skillActivated');
-        }
-        currentTarget = target;
-        
-        setTimeout(() => {
-          target.isTargetSuccess = false;
-          enemies = enemies;
-          startBurst();
-        }, 200);
-      }
     }
   
     function startBurst() {
       gameState = 'BURST';
       comboCount = 0;
-      burstTimeLeft = burstMaxTime;
+      currentComboDisplayCount = 0;
+      showComboDisplay = true; // Burst Mode 開始即顯示
+      burstTimeLeft = gameConfig.burstMaxTime;
       nextBurstWord();
       
       burstInterval = setInterval(() => {
@@ -404,6 +561,17 @@
   
     function handleBurstTyping() {
       if (burstInput.toLowerCase() === currentBurstWord.toLowerCase()) {
+        // 更新連擊數顯示
+        // --- 每次成功連擊都增加時間 ---
+        const bonusTime = gameConfig.comboBonusTime;
+        burstTimeLeft = Math.min(gameConfig.burstMaxTime, burstTimeLeft + bonusTime);
+        burstBonusText = `+${(bonusTime / 1000).toFixed(1)}s`;
+        setTimeout(() => { burstBonusText = ""; }, 800);
+        // --- 每次成功連擊都增加時間 ---
+
+        currentComboDisplayCount = comboCount + 1; // comboCount 還沒加，所以這裡加1
+        // 移除原有的 setTimeout 邏輯，讓顯示狀態由 endBurst 統一關閉
+
         comboCount++;
         
         // 觸發玩家攻擊特效
@@ -413,23 +581,62 @@
           player = player;
         }, 200);
 
+        // 立即計算傷害數值，以便後續視覺特效與傷害套用使用
+        let multiplier = player.selectedAction === 'S' ? 2 : 1;
+        if (devMode) multiplier *= 10; // Dev 模式傷害加成
+        const damagePerWord = gameConfig.baseDamagePerWord * multiplier;
+
         // 觸發視覺特效
         currentTarget.isHit = true;
+        currentTarget.lastDamage = damagePerWord;
         const hitTarget = currentTarget;
         setTimeout(() => {
           hitTarget.isHit = false;
+          hitTarget.lastDamage = 0;
           enemies = enemies; // 確保狀態清除後能更新 UI
-        }, 150);
+        }, 1000);
 
-        // 立即造成傷害
-        let multiplier = player.selectedAction === 'S' ? 2 : 1;
-        if (devMode) multiplier *= 10;
-        const damagePerWord = 20 * multiplier;
+        // 套用傷害
         currentTarget.hp = Math.max(0, currentTarget.hp - damagePerWord);
         enemies = enemies; // 觸發 Svelte 反應式更新
 
         if (currentTarget.hp <= 0) {
-          endBurst();
+          // 分數邏輯
+          const scoreMap = gameConfig.scoreMap;
+          const points = scoreMap[currentTarget.wordType] || 0;
+          gameScore = Math.min(100, gameScore + points);
+
+          // 檢查是否進入 Boss 房
+          if (gameScore >= 100 && !isBossMode) {
+            isBossMode = true;
+            const deadId = currentTarget.id;
+            setTimeout(() => {
+              enemies = [generateMonster(1, 'unique')];
+              selectedMonsterId = enemies[0].id;
+              addLog("--- BOSS ROOM ---", 'unique'); // Boss 訊息
+            }, gameConfig.enemyRespawnDelay); // 等待最後一隻怪物的死亡動畫
+          } 
+          // 非 Boss 階段的重生邏輯
+          else if (!isBossMode) {
+            const deadId = currentTarget.id;
+            setTimeout(() => {
+              const idx = enemies.findIndex(e => e.id === deadId);
+              if (idx !== -1) { // 如果怪物位置還存在，則重生
+                enemies[idx] = generateMonster(deadId, getRandomTier()); // 在原位重生
+                enemies = enemies;
+              }
+            }, 1000);
+          }
+
+          const aliveEnemies = enemies.filter(e => e.hp > 0);
+          if (aliveEnemies.length > 0) {
+            // 如果還有怪物，自動切換到下一個目標（HP 最低者）
+            currentTarget = aliveEnemies.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr));
+            selectedMonsterId = currentTarget.id; // 確保黃色框立即移動到新目標
+            nextBurstWord();
+          } else {
+            endBurst();
+          }
         } else {
           nextBurstWord();
         }
@@ -438,151 +645,66 @@
   
     function endBurst() {
       clearInterval(burstInterval);
-      const targetName = currentTarget.name.toLowerCase();
-      gameLog = t('comboEnd', comboCount);
+      // 根據當前語言選擇名稱
+      const targetName = currentTarget[`name_${currentLanguage}`] || currentTarget.name_en;
+      let logText = t('comboEnd', comboCount);
       
       if (currentTarget.hp <= 0) {
-        gameLog += ` ${t('enemyDefeated', targetName)}`;
+        logText += ` ${t('enemyDefeated', targetName)}`;
       }
+      addLog(logText, currentTarget.wordType, targetName);
+      showComboDisplay = false; // Burst Mode 真正結束時關閉顯示
       resetTurn();
     }
   
     function resetTurn() {
       player.atb = 0;
       player.selectedAction = null;
-      currentTarget = null;
+      currentTarget = null; // 清除當前目標
       targetInput = "";
       burstInput = "";
+      // 安全起見，確保結束時關閉
+      showComboDisplay = false; 
+      if (comboDisplayTimeout) clearTimeout(comboDisplayTimeout);
       gameState = 'BATTLE';
     }
   </script>
   
   <svelte:window on:keydown={handleGlobalKeyDown} />
   
-  <header class="game-header">
-    <div class="game-title">TYPE: Keyboard Adventurer</div>
-    <div class="header-controls">
-      <button class="dev-toggle" class:active={devMode} on:click={() => devMode = !devMode}>{t('devMode')}: {devMode ? 'ON' : 'OFF'}</button>
-      <button on:click={() => currentLanguage = 'en'} class:active={currentLanguage === 'en'}>EN</button>
-      <button on:click={() => currentLanguage = 'zh'} class:active={currentLanguage === 'zh'}>ZH</button>
-    </div>
-  </header>
+  <Header 
+    {t} {devMode} {currentLanguage} 
+    {gameScore}
+    onToggleDev={() => devMode = !devMode} 
+    onSetLanguage={(lang) => currentLanguage = lang} 
+  />
 
   <div class="game-viewport">
-    <!-- 獨立的戰鬥日誌視窗 (左側) -->
-    <div class="message-log" bind:this={logContainer}>
-      <button class="clear-log-btn" on:click={clearLogs}>CLEAR LOG</button>
-      {#each logHistory as log, i}
-        <div class="log-entry" class:latest={i === logHistory.length - 1}>
-          {log}
-        </div>
-      {/each}
-    </div>
+    {#if showLog}
+      <LogViewer {logHistory} {gameState} onClear={clearLogs} />
+    {/if}
 
     <main class="game-container">
-      <!-- 主遊戲內容區 (內部垂直排列) -->
       <div class="game-main-content">
-        <!-- 暫停/結束 選單遮罩 -->
-        {#if gameState === 'PAUSED' || gameState === 'GAME_OVER'}
-          <div class="modal-overlay">
-            <div class="modal-content">
-              {#if gameState === 'GAME_OVER'}
-                <h1 style="color: #fff;">{t('playerDefeated')}</h1>
-              {:else}
-                <h1>{t('gamePaused')}</h1>
-                <button on:click={togglePause}>{t('continueGame')}</button>
-              {/if}
-              <button on:click={restartGame}>{t('restartGame')}</button>
-            </div>
-          </div>
-        {/if}
+        <ModalOverlay 
+          {gameState} {t} 
+          onTogglePause={togglePause} 
+          onRestart={restartGame}
+          {showLog}
+          {showHelp}
+          onToggleLog={() => showLog = !showLog}
+          onToggleHelp={() => showHelp = !showHelp}
+        />
 
-        <!-- 第一人稱戰鬥畫面 -->
-        <div class="battle-scene">
-          <div class="enemies-row">
-            {#each enemies as enemy}
-              <div 
-                class="monster-wrapper" 
-                class:dead={enemy.hp <= 0} 
-                class:hit={enemy.isHit}
-                class:attacking={enemy.isAttacking}
-                class:target-success={enemy.isTargetSuccess}
-                style="--tier-color: {enemy.wordType === 'white' ? '#fff' : (enemy.wordType === 'magic' ? '#3498db' : (enemy.wordType === 'rare' ? '#f1c40f' : '#9b59b6'))};">
-                <div class="monster-sprite">
-                  {enemy.icon}
-                </div>
-                <div class="monster-word">
-                  {#each enemy.word.split('') as char, i}
-                    <span class="letter" 
-                      class:correct={gameState === 'TARGETING' && targetInput.length > i && targetInput.toLowerCase().slice(0, i+1) === enemy.word.toLowerCase().slice(0, i+1)}
-                    >{char}</span>
-                  {/each}
-                </div>
-                <div class="stat-row">{t('hp')}: {enemy.hp} / {enemy.maxHp}</div>
-                <div class="bar-container">
-                  <div class="hp-fill" style="width: {(enemy.hp/enemy.maxHp)*100}%"></div>
-                </div>
-                <div class="stat-row">{t('mp')}: {enemy.mp} / {enemy.maxMp}</div>
-                <div class="bar-container">
-                  <div class="mp-fill" style="width: {(enemy.mp/enemy.maxMp)*100}%"></div>
-                </div>
-                <div class="stat-row">{t('atb')}: {Math.floor(enemy.atb)}%</div>
-                <div class="bar-container atb">
-                  <div class="atb-fill" style="width: {enemy.atb}%"></div>
-                </div>
-                <div class="monster-source">words_{enemy.wordType}.json</div>
-              </div>
-            {/each}
-          </div>
+        <BattleScene {enemies} {player} {gameState} {selectedMonsterId} {t} {currentLanguage} {showComboDisplay} {currentComboDisplayCount} />
 
-          <!-- 玩家視覺角色 -->
-          <div class="player-visual-wrapper" class:attacking={player.isAttacking} class:hit={player.isHit}>
-            <div class="player-sprite">🛡️</div>
-            <div class="player-tag">PLAYER</div> 
-            <div class="stat-row">{t('hp')}: {player.hp} / {player.maxHp}</div>
-            <div class="bar-container">
-              <div class="hp-fill" style="width: {(player.hp/player.maxHp)*100}%"></div>
-            </div>
-            <div class="stat-row">{t('mp')}: {player.mp} / {player.maxMp}</div>
-            <div class="bar-container">
-              <div class="mp-fill" style="width: {(player.mp/player.maxMp)*100}%"></div>
-            </div>
-            <div class="stat-row">{t('atb')}: {Math.floor(player.atb)}%</div>
-            <div class="bar-container atb">
-              <div class="atb-fill" style="width: {player.atb}%"></div>
-            </div>
-          </div>
-        </div>
-        <!-- 下方 UI 操作與打字區 -->
-        <div class="ui-panel">
-            <div class="input-area">
-              {#if gameState === 'ACTION_SELECT'}
-                <div class="action-menu">
-                  <span class="key-hint">A</span> {t('attack')}
-                  <span class="key-hint">S</span> {t('skill')}
-                  <span class="key-hint">I</span> {t('item')}
-                  <span class="key-hint">B</span> {t('block')}
-                  <span class="key-hint">R</span> {t('run')}
-                </div>
-              {:else if gameState === 'TARGETING'}
-                <div class="targeting-status">
-                  {t('targetingPrompt')}
-                </div>
-              {:else if gameState === 'BURST'}
-                <div class="burst-container">
-                  <div class="timer-bar" style="width: {(burstTimeLeft/burstMaxTime)*100}%"></div>
-                  <div class="timer-text">{(burstTimeLeft / 1000).toFixed(1)}s</div>
-                  <div class="combo">{t('combo')}: {comboCount}</div>
-                <div class="burst-word">
-                  {t('burstPrompt')}
-                  <span class="word-display">{#each currentBurstWord.split('') as char, i}<span class="letter" class:correct={burstInput[i]?.toLowerCase() === char} class:incorrect={burstInput[i] !== undefined && burstInput[i]?.toLowerCase() !== char} class:pending={burstInput[i] === undefined}>{char}</span>{/each}</span>
-                </div>
-                </div>
-              {/if}
-          </div>
-        </div>
+        <UIPanel 
+          {gameState} {t} 
+          {burstTimeLeft} {burstMaxTime} 
+          {comboCount} {currentBurstWord} {burstInput} 
+          {burstBonusText}
+        />
       </div>
-    
     </main>
   </div>
   
@@ -598,35 +720,6 @@
       overflow: hidden;
     }
   
-    .game-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 20px;
-      border-bottom: 1px solid #fff;
-      background: #000;
-      width: 100%;
-      box-sizing: border-box;
-      z-index: 10;
-    }
-
-    .game-title {
-      font-size: 0.9rem;
-      font-weight: bold;
-    }
-
-    .header-controls {
-      display: flex;
-      gap: 10px;
-    }
-
-    .header-controls button {
-      background: #000; color: #fff; border: 1px solid #fff; padding: 3px 8px;
-      cursor: pointer; font-family: inherit;
-      font-size: 0.7rem;
-    }
-    .header-controls button.active { background: #fff; color: #000; }
-
     .game-viewport {
       flex: 1;
       display: flex;
@@ -654,278 +747,5 @@
       flex-direction: column;
       overflow: hidden;
     }
-  
-    .modal-overlay {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.95);
-      display: flex; justify-content: center; align-items: center;
-      z-index: 1000;
-    }
-    .modal-content {
-      text-align: center;
-      background: #000;
-      padding: 40px;
-      border: 1px solid #fff;
-    }
-    .modal-content button {
-      display: block; width: 220px; margin: 15px auto; padding: 12px;
-      background: #000; color: #fff; border: 1px solid #fff;
-      font-family: inherit; cursor: pointer; font-size: 1rem;
-    }
-    .modal-content button:hover { background: #fff; color: #000; }
-
-    .battle-scene {
-      flex: 3;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #000;
-      perspective: 500px;
-      position: relative;
-    }
-
-    .enemies-row {
-      display: flex;
-      width: 100%;
-      justify-content: space-around;
-      margin-bottom: 50px;
-    }
-
-    .player-visual-wrapper {
-      text-align: center;
-      transition: transform 0.2s ease-out;
-    }
-
-    .player-visual-wrapper.attacking {
-      transform: translateY(-40px) scale(1.1);
-    }
-
-    .player-visual-wrapper.hit {
-      animation: shake 0.15s infinite, flash 0.15s ease-out;
-    }
-
-    .player-sprite {
-      font-size: 4rem;
-      filter: drop-shadow(0 0 10px rgba(255,255,255,0.5));
-      margin-bottom: 5px;
-    }
-
-    .player-tag {
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: #fff;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      text-shadow: none;
-    }
-  
-    .monster-wrapper {
-      text-align: center;
-      transition: all 0.5s;
-    }
-  
-    .monster-wrapper.dead {
-      opacity: 0;
-      transform: scale(0.5) translateY(100px);
-    }
-  
-    .monster-wrapper.hit {
-      animation: shake 0.15s infinite, flash 0.15s ease-out;
-    }
-
-    @keyframes shake {
-      0% { transform: translate(2px, 0); }
-      25% { transform: translate(-2px, 0); }
-      50% { transform: translate(2px, 0); }
-      75% { transform: translate(-2px, 0); }
-      100% { transform: translate(0, 0); }
-    }
-
-    @keyframes flash {
-      0% { filter: invert(0); }
-      50% { filter: invert(1); }
-      100% { filter: invert(0); }
-    }
-
-    .monster-wrapper.attacking {
-      animation: lunge 0.4s ease-out;
-      z-index: 5;
-    }
-
-    @keyframes lunge {
-      0% { transform: translateY(0); }
-      30% { transform: translateY(50px) scale(1.2); }
-      100% { transform: translateY(0); }
-    }
-
-    .monster-wrapper.target-success {
-      animation: target-flash 0.2s ease-out;
-    }
-
-    @keyframes target-flash {
-      0% { transform: scale(1); filter: brightness(1); }
-      50% { transform: scale(1.1); filter: brightness(3); }
-      100% { transform: scale(1); filter: brightness(1); }
-    }
-
-    .player-stats.hit {
-      animation: player-flash 0.15s ease-out;
-    }
-    @keyframes player-flash {
-      0% { background: #000; }
-      50% { background: #fff; }
-      100% { background: #000; }
-    }
-    .monster-name {
-      font-size: 0.8rem;
-      color: var(--tier-color, #fff);
-      text-transform: uppercase;
-      margin-bottom: 5px;
-      letter-spacing: 1px;
-    }
-
-    .monster-word {
-      font-size: 1.2rem;
-      font-weight: bold;
-      color: var(--tier-color, #fff);
-      text-shadow: none;
-      margin-bottom: 8px;
-    }
-
-    .monster-wrapper .stat-row, .player-visual-wrapper .stat-row {
-      text-align: left;
-      width: 100px;
-      margin: 0 auto;
-      font-size: 0.7rem;
-    }
-  
-    .monster-sprite {
-      font-size: 3rem;
-      margin-bottom: 5px;
-      filter: drop-shadow(0 0 5px var(--tier-color, transparent));
-    }
-
-    .monster-source {
-      font-size: 0.6rem;
-      color: #666;
-      margin-top: 2px;
-    }
-
-    .bar-container {
-      width: 100px;
-      height: 4px;
-      background: #000;
-      border: 1px solid #fff;
-      margin: 4px auto;
-    }
-  
-    .hp-fill { height: 100%; background: #fff; transition: width 0.3s; }
-    .atb-fill { height: 100%; background: #fff; }
-    .mp-fill { height: 100%; background: #fff; transition: width 0.3s; }
-  
-    .message-log {
-      width: 250px;
-      height: 650px; /* 與遊戲視窗同高 */
-      background: rgba(255, 255, 255, 0.02);
-      padding: 15px;
-      border: 1px solid #fff;
-      font-size: 0.8rem;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      scrollbar-width: thin;
-      position: relative;
-    }
-
-    /* --- 懷舊電腦風格捲軸 --- */
-    .message-log::-webkit-scrollbar {
-      width: 12px;
-    }
-    .message-log::-webkit-scrollbar-track {
-      background: #000;
-      border-left: 1px solid #fff;
-    }
-    .message-log::-webkit-scrollbar-thumb {
-      background: #fff;
-      border: 2px solid #000;
-    }
-
-    .clear-log-btn {
-      position: sticky;
-      top: -15px; /* 抵銷 padding */
-      width: calc(100% + 30px);
-      margin-left: -15px;
-      background: #000;
-      color: #fff;
-      border: none;
-      border-bottom: 1px solid #fff;
-      font-family: inherit;
-      font-size: 0.7rem;
-      padding: 5px;
-      cursor: pointer;
-      z-index: 5;
-      margin-bottom: 10px;
-    }
-    .clear-log-btn:hover {
-      background: #fff;
-      color: #000;
-    }
-
-    .log-entry { color: #888; line-height: 1.4; }
-    .log-entry.latest { color: #fff; font-weight: bold; }
-  
-    .ui-panel {
-      height: 200px;
-      display: flex;
-      flex-direction: column;
-      padding: 10px 20px;
-      gap: 10px;
-      background: rgba(255,255,255,0.05);
-      box-sizing: border-box;
-    }
-  
-    .input-area {
-      flex: 1;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-  
-    .targeting-status { font-size: 1.2rem; color: #fff; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
-
-    .action-menu { font-size: 1.2rem; }
-    .key-hint {
-      background: #fff;
-      color: #000;
-      padding: 2px 6px;
-      border-radius: 0;
-      margin-right: 5px;
-    }
-  
-    input {
-      width: 80%;
-      padding: 8px;
-      font-size: 1.2rem;
-      background: transparent;
-      border: none;
-      border-bottom: 1px solid #fff;
-      color: white;
-      text-align: center;
-      outline: none;
-    }
-  
-    .burst-container { text-align: center; width: 100%; }
-    .timer-bar { height: 4px; background: #fff; margin-bottom: 5px; transition: width 0.1s linear; }
-    .timer-text { font-size: 0.9rem; color: #fff; margin-bottom: 2px; font-weight: bold; }
-    .burst-word .word-display { font-size: 1.6rem; font-weight: bold; }
-    .letter.correct { color: #fff; text-decoration: underline; }
-    .letter.incorrect { color: #ff4d4d; text-decoration: underline; font-weight: 900; }
-    .letter.pending { color: #666; }
-
-    .combo { font-size: 1rem; color: #fff; }
   </style>
   

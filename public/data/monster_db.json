@@ -1,0 +1,92 @@
+{
+    "metadata": {
+      "description": "Comprehensive Monster Database with Races, Affixes, and Icons",
+      "version": "1.4"
+    },
+    "races": [
+      { "id": "human", "zh": "人類", "en": "Human", "icon": "👤" },
+      { "id": "feral", "zh": "荒獸", "en": "Feral", "icon": "🐾" },
+      { "id": "revenant", "zh": "亡靈", "en": "Revenant", "icon": "💀" },
+      { "id": "fiend", "zh": "魔族", "en": "Fiend", "icon": "👿" },
+      { "id": "machina", "zh": "機械", "en": "Machina", "icon": "⚙️" }
+    ],
+    "affixes": {
+      "prefixes": [
+        { "category": "生命", "zh": "頑強的", "en": "Tenacious", "icon": "❤️" },
+        { "category": "速度", "zh": "神速的", "en": "Swift", "icon": "⚡" },
+        { "category": "回復", "zh": "再生的", "en": "Regenerative", "icon": "🌿" },
+        { "category": "減傷", "zh": "不壞的", "en": "Resilient", "icon": "🛡️" },
+        { "category": "能量護盾", "zh": "盈輝的", "en": "Shimmering", "icon": "💎" }
+      ],
+      "suffixes": [
+        { "category": "火", "zh": "烈焰", "en": "Flame", "icon": "🔥" },
+        { "category": "冰", "zh": "寒霜", "en": "Frost", "icon": "❄️" },
+        { "category": "雷", "zh": "鳴雷", "en": "Thunder", "icon": "⛈️" },
+        { "category": "風", "zh": "疾風", "en": "Gale", "icon": "🌪️" },
+        { "category": "毒", "zh": "劇毒", "en": "Venom", "icon": "🧪" },
+        { "category": "爆炸", "zh": "爆裂", "en": "Blast", "icon": "💥" }
+      ]
+    },
+    "monster_base_names": {
+      "human": [
+        { "zh": "偵查兵", "en": "Scout", "icon": "🏹" }, { "zh": "步兵", "en": "Infantry", "icon": "💂" },
+        { "zh": "弩手", "en": "Crossbowman", "icon": "🎯" }, { "zh": "騎士", "en": "Knight", "icon": "🏇" },
+        { "zh": "祭司", "en": "Priest", "icon": "🔮" }, { "zh": "傭兵", "en": "Mercenary", "icon": "💰" },
+        { "zh": "刺客", "en": "Assassin", "icon": "🗡️" }, { "zh": "護衛", "en": "Guardian", "icon": "💂‍♂️" },
+        { "zh": "術士", "en": "Warlock", "icon": "🧙" }, { "zh": "遊俠", "en": "Ranger", "icon": "🍃" },
+        { "zh": "狂戰士", "en": "Berserker", "icon": "🪓" }, { "zh": "督軍", "en": "Warlord", "icon": "🚩" },
+        { "zh": "教徒", "en": "Cultist", "icon": "🕯️" }, { "zh": "逃犯", "en": "Outlaw", "icon": "⛓️" },
+        { "zh": "武僧", "en": "Monk", "icon": "🤜" }, { "zh": "獵人", "en": "Hunter", "icon": "🐾" },
+        { "zh": "角鬥士", "en": "Gladiator", "icon": "🔱" }, { "zh": "方陣兵", "en": "Phalanx", "icon": "🛡️" },
+        { "zh": "執法者", "en": "Enforcer", "icon": "⚖️" }, { "zh": "聖騎士", "en": "Paladin", "icon": "✨" }
+      ],
+      "feral": [
+        { "zh": "裂齒狼", "en": "Ripfang Wolf", "icon": "🐺" }, { "zh": "鋼鬃豬", "en": "Steelback Boar", "icon": "🐗" },
+        { "zh": "影豹", "en": "Shadow Panther", "icon": "🐆" }, { "zh": "巨猿", "en": "Great Ape", "icon": "🦍" },
+        { "zh": "猛禽", "en": "Raptor", "icon": "🦅" }, { "zh": "毒蜥", "en": "Venom Lizard", "icon": "🦎" },
+        { "zh": "岩熊", "en": "Crag Bear", "icon": "🐻" }, { "zh": "蝙蝠", "en": "Bat", "icon": "🦇" },
+        { "zh": "犀牛", "en": "Rhino", "icon": "🦏" }, { "zh": "洞窟蛛", "en": "Cave Spider", "icon": "🕷️" },
+        { "zh": "飛龍", "en": "Wyvern", "icon": "🐉" }, { "zh": "蠍子", "en": "Scorpion", "icon": "🦂" },
+        { "zh": "禿鷲", "en": "Vulture", "icon": "🦴" }, { "zh": "公牛", "en": "Bull", "icon": "🐂" },
+        { "zh": "土狼", "en": "Hyena", "icon": "🐕" }, { "zh": "猛獁", "en": "Mammoth", "icon": "🐘" },
+        { "zh": "巨蟒", "en": "Python", "icon": "🐍" }, { "zh": "奇美拉", "en": "Chimera", "icon": "🦁" },
+        { "zh": "劍齒虎", "en": "Sabertooth", "icon": "🐅" }, { "zh": "巨蟹", "en": "Giant Crab", "icon": "🦀" }
+      ],
+      "revenant": [
+        { "zh": "骷髏兵", "en": "Skeleton", "icon": "💀" }, { "zh": "食屍鬼", "en": "Ghoul", "icon": "🧟" },
+        { "zh": "喪屍", "en": "Zombie", "icon": "🧟‍♂️" }, { "zh": "女妖", "en": "Banshee", "icon": "👻" },
+        { "zh": "巫妖", "en": "Lich", "icon": "👑" }, { "zh": "幽靈", "en": "Wraith", "icon": "🌫️" },
+        { "zh": "亡魂", "en": "Revenant", "icon": "🕯️" }, { "zh": "骨龍", "en": "Bone Dragon", "icon": "🐲" },
+        { "zh": "木乃伊", "en": "Mummy", "icon": "🩹" }, { "zh": "死靈", "en": "Necromancer", "icon": "💀" },
+        { "zh": "怨靈", "en": "Specter", "icon": "🧿" }, { "zh": "骨碎者", "en": "Bonecrusher", "icon": "🔨" },
+        { "zh": "囚徒", "en": "Prisoner", "icon": "⛓️" }, { "zh": "無頭騎", "en": "Dullahan", "icon": "🏇" },
+        { "zh": "暗影", "en": "Shade", "icon": "🌑" }, { "zh": "守望者", "en": "Watcher", "icon": "👁️" },
+        { "zh": "軀殼", "en": "Hollow", "icon": "👤" }, { "zh": "祭司", "en": "Acolyte", "icon": "⛪" },
+        { "zh": "判官", "en": "Inquisitor", "icon": "⚖️" }, { "zh": "僕從", "en": "Thrall", "icon": "🛐" }
+      ],
+      "fiend": [
+        { "zh": "領主", "en": "Overlord", "icon": "😈" }, { "zh": "小鬼", "en": "Imp", "icon": "👹" },
+        { "zh": "魔眼", "en": "Gazer", "icon": "👁️‍🗨️" }, { "zh": "地獄犬", "en": "Hellhound", "icon": "🐕‍🦺" },
+        { "zh": "魅魔", "en": "Succubus", "icon": "💋" }, { "zh": "屠夫", "en": "Butcher", "icon": "🔪" },
+        { "zh": "判官", "en": "Judicator", "icon": "⚔️" }, { "zh": "寄生蟲", "en": "Parasite", "icon": "🐛" },
+        { "zh": "吞噬者", "en": "Devourer", "icon": "👅" }, { "zh": "守門人", "en": "Gatekeeper", "icon": "🗝️" },
+        { "zh": "編織者", "en": "Weaver", "icon": "🕸️" }, { "zh": "干擾者", "en": "Disruptor", "icon": "🌀" },
+        { "zh": "潛伏者", "en": "Lurker", "icon": "👤" }, { "zh": "侵蝕者", "en": "Eroder", "icon": "🧪" },
+        { "zh": "狂亂者", "en": "Maniac", "icon": "💢" }, { "zh": "畸形物", "en": "Abomination", "icon": "🧟" },
+        { "zh": "執行官", "en": "Executor", "icon": "🩸" }, { "zh": "觀察者", "en": "Observer", "icon": "🧿" },
+        { "zh": "災厄", "en": "Calamity", "icon": "☄️" }, { "zh": "魔像", "en": "Fiend-Statue", "icon": "🗿" }
+      ],
+      "machina": [
+        { "zh": "機兵", "en": "Automaton", "icon": "🤖" }, { "zh": "傀儡", "en": "Golem", "icon": "🗿" },
+        { "zh": "哨兵", "en": "Sentry", "icon": "📡" }, { "zh": "掠奪者", "en": "Raider", "icon": "⚙️" },
+        { "zh": "暴君", "en": "Tyrant", "icon": "🏗️" }, { "zh": "機械犬", "en": "Mecha-Hound", "icon": "🐕" },
+        { "zh": "守衛", "en": "Guardian", "icon": "🛡️" }, { "zh": "工兵", "en": "Sapper", "icon": "🧨" },
+        { "zh": "收集者", "en": "Collector", "icon": "📥" }, { "zh": "執行者", "en": "Enforcer", "icon": "👮" },
+        { "zh": "重砲手", "en": "Artillery", "icon": "🚀" }, { "zh": "探測器", "en": "Probe", "icon": "🛸" },
+        { "zh": "屠殺者", "en": "Slayer", "icon": "⚔️" }, { "zh": "核心", "en": "Core", "icon": "🔋" },
+        { "zh": "維修機", "en": "Fixer", "icon": "🔧" }, { "zh": "坦克", "en": "Chassis", "icon": "🚜" },
+        { "zh": "巨像", "en": "Colossus", "icon": "🧱" }, { "zh": "無人機", "en": "Drone", "icon": "🚁" },
+        { "zh": "干擾機", "en": "Jammer", "icon": "📡" }, { "zh": "處刑者", "en": "Executioner", "icon": "⚡" }
+      ]
+    }
+  }
