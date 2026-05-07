@@ -7,7 +7,7 @@
 </script>
 
 <header class="game-header">
-  <div class="game-title">TYPE: Keyboard Adventurer</div>
+  <div class="game-title">Path of Typing</div>
 
   <div class="header-controls">
     <button class="dev-toggle" class:active={devMode} on:click={onToggleDev}>

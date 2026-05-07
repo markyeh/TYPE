@@ -474,7 +474,7 @@
   /* ATB滿且已設定技能時的黃色閃爍方框 */
   .skill-slot.prompt-yellow {
     border: 2px solid #e0ce86 !important;
-    animation: yellow-flash-box 1s infinite ease-in-out !important;
+    animation: yellow-flash-box 0.5s infinite ease-in-out !important;
     z-index: 10;
     background: rgba(241, 196, 15, 0.1) !important;
   }
