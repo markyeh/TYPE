@@ -446,7 +446,8 @@
         enemies = [generateMonster(1, 'unique')];
       } else { // 確保場上怪物數量不超過最大值
         const currentEnemyCount = enemies.filter(e => e.hp > 0).length;
-        const enemiesToSpawn = gameConfig.maxEnemies - currentEnemyCount;
+        const maxSlots = 9; // 3x3 網格總數
+        const enemiesToSpawn = maxSlots - currentEnemyCount;
         for (let i = 0; i < enemiesToSpawn; i++) {
           const newId = Math.max(...enemies.map(e => e.id), 0) + 1; // 確保 ID 唯一
           enemies = [...enemies, generateMonster(newId, getRandomTier())];
@@ -637,6 +638,34 @@
             const currentIndex = aliveEnemies.findIndex(m => m.id === selectedMonsterId);
             const newIndex = (currentIndex + 1) % aliveEnemies.length;
             selectedMonsterId = aliveEnemies[newIndex].id;
+            return;
+          }
+
+          // 處理垂直選擇 (J/K 或 上下方向鍵)
+          // 根據 3x3 網格：索引 -3 是上移，索引 +3 是下移
+          const fullIndex = enemies.findIndex(m => m.id === selectedMonsterId);
+          
+          if (key === 'K' || key === 'ARROWUP') { // 依照要求：K 為上移
+            e.preventDefault();
+            // 往上搜尋同欄位中活著的怪物
+            for (let i = fullIndex - 3; i >= 0; i -= 3) {
+              if (enemies[i] && enemies[i].hp > 0) {
+                selectedMonsterId = enemies[i].id;
+                return;
+              }
+            }
+            return;
+          }
+          
+          if (key === 'J' || key === 'ARROWDOWN') { // 依照要求：J 為下移
+            e.preventDefault();
+            // 往下搜尋同欄位中活著的怪物
+            for (let i = fullIndex + 3; i < enemies.length; i += 3) {
+              if (enemies[i] && enemies[i].hp > 0) {
+                selectedMonsterId = enemies[i].id;
+                return;
+              }
+            }
             return;
           }
         }
@@ -946,7 +975,7 @@
           {currentBurstWords} bind:currentWordInput {currentWordIndex} 
           {visibleWordsStartIndex}
           wordsPerLine={gameConfig.typingConfig?.wordsPerLine || 8}
-          linesToDisplay={gameConfig.typingConfig?.linesToDisplay || 2}
+          linesToDisplay={gameConfig.typingConfig?.linesToDisplay || 3}
         />
       </div>
     </main>

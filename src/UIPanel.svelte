@@ -12,8 +12,8 @@
   export let currentWordInput = "";
   export let currentWordIndex = 0;
   export let visibleWordsStartIndex = 0;
-  export let wordsPerLine = 8;
-  export let linesToDisplay = 2;
+  export let wordsPerLine = 8; // 確保預設值
+  export let linesToDisplay = 3; // 確保預設值為 3 行
   export let comboCount;
 
   let inputEl;
@@ -43,7 +43,7 @@
       <div class="burst-container">
         <!-- Burst Mode Timer Bar -->
         <div class="timer-bar" style="width: {(burstTimeLeft/burstMaxTime)*100}%"></div>
-        <div class="timer-text">
+        <div class="timer-text" style="margin-bottom: 0;">
           {(burstTimeLeft / 1000).toFixed(1)}s
           {#if burstBonusText}
             <span class="bonus-hint">{burstBonusText}</span>
@@ -96,7 +96,7 @@
 
 <style>
   .ui-panel {
-    height: 180px; /* 面板本身也稍微加高，確保空間充裕 */
+    height: 150px; /* 縮減面板高度，為 BattleScene 騰出空間 */
     display: flex; 
     flex-direction: column;
     flex-shrink: 0;
@@ -121,12 +121,12 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 5px; /* 縮減間距 */
   }
   .progress-text {
     font-size: 0.6rem;
     color: #888;
-    margin-bottom: 4px;
+    margin-bottom: 2px; /* 縮減間距 */
     letter-spacing: 1px;
   }
   .progress-bar-container {
@@ -165,11 +165,11 @@
 
   .word-display-container {
     position: relative;
-    height: calc((var(--line-height-val) * var(--lines-to-display)) + (var(--row-gap) * (var(--lines-to-display) - 1)) + 4px);
+    height: calc((var(--line-height-val) * var(--lines-to-display)) + (var(--row-gap) * (var(--lines-to-display) - 1)) + 10px);
     overflow: hidden;
-    font-size: 1.5rem;
+    font-size: 1.3rem; /* 稍微縮小字體確保 8 個單字能在一行內排版，避免因自動換行導致捲動偏移 */
     line-height: var(--line-height-val);
-    margin-top: 10px;
+    margin-top: 5px; /* 縮減間距 */
     background: rgba(0,0,0,0.3);
     padding: 2px 15px;
     border-radius: 4px;

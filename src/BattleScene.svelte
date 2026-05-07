@@ -21,7 +21,13 @@
 
   // 計算當前選中怪物的索引，用於定位選擇框
   $: selectedIndex = enemies.findIndex(e => e.id === selectedMonsterId);
-  $: showFrame = selectedIndex !== -1 && (gameState === 'ACTION_SELECT' || gameState === 'BATTLE');
+  // 只有在非 Unique 怪物（Boss）且處於行動狀態時才顯示選擇框
+  $: showFrame = selectedIndex !== -1 && (gameState === 'ACTION_SELECT' || gameState === 'BATTLE' || gameState === 'BURST') && enemies[selectedIndex]?.wordType !== 'unique';
+  $: frameStyle = showFrame ? (
+    enemies[selectedIndex].wordType === 'unique'
+    ? "left: 50%; top: 50%; width: 95%; height: 90%;"
+    : `left: ${((selectedIndex % 3) * 33.33) + 16.66}%; top: ${Math.floor(selectedIndex / 3) * 33.33 + 16.66}%; width: 30%; height: 30%;`
+  ) : "";
 
   let hoveredSkill = null;
   let tooltipPos = { x: 0, y: 0 };
@@ -53,7 +59,7 @@
     {#if showFrame}
       <div 
         class="selection-frame" 
-        style="left: {((selectedIndex * 2 + 1) / (enemies.length * 2)) * 100}%;">
+        style={frameStyle}>
       </div>
     {/if}
 
@@ -63,7 +69,19 @@
         class:dead={enemy.hp <= 0} 
         class:attacking={enemy.isAttacking}
         class:target-success={enemy.isTargetSuccess}
-        style="--tier-color: {enemy.wordType === 'white' ? '#fff' : (enemy.wordType === 'magic' ? '#3498db' : (enemy.wordType === 'rare' ? '#f1c40f' : '#9b59b6'))};">
+        class:unique={enemy.wordType === 'unique'}
+        class:tier-white={enemy.wordType === 'white'}
+        class:tier-magic={enemy.wordType === 'magic'}
+        class:tier-rare={enemy.wordType === 'rare'}
+        class:tier-unique={enemy.wordType === 'unique'}
+        style="--tier-color: {enemy.wordType === 'white' ? '#fff' : (enemy.wordType === 'magic' ? '#3498db' : (enemy.wordType === 'rare' ? '#f1c40f' : '#d35400'))};">
+        <div class="bar-container hp-main">
+          <div class="hp-fill" style="width: {(enemy.hp/enemy.maxHp)*100}%"></div>
+          <div class="hp-text-overlay">
+            <span class="name-base">{enemy.nameParts.base[currentLanguage]}</span>
+            <span class="hp-text">{enemy.hp}/{enemy.maxHp}</span>
+          </div>
+        </div>
         <div class="monster-sprite">
           <!-- 受擊特效僅套用在 monster-icon 上 -->
           <div class="monster-icon" 
@@ -76,22 +94,10 @@
             class:hit-blast={enemy.isHit && enemy.lastHitType === 'blast'}>
             {enemy.icon}
           </div>
-          {#if enemy.lastDamage > 0}
-            <span class="damage-pop sprite-damage">-{enemy.lastDamage}</span>
-          {/if}
         </div>
-        <div class="monster-name-display">
-          <div class="name-race">{enemy.nameParts.race[currentLanguage]}</div>
-          <div class="name-base">{enemy.nameParts.base[currentLanguage]}</div>
-        </div>
-        <div class="stat-row">
-          {t('hp')}: {enemy.hp} / {enemy.maxHp}
-        </div>
-        <div class="bar-container"><div class="hp-fill" style="width: {(enemy.hp/enemy.maxHp)*100}%"></div></div>
-        <div class="stat-row">{t('mp')}: {enemy.mp} / {enemy.maxMp}</div>
-        <div class="bar-container"><div class="mp-fill" style="width: {(enemy.mp/enemy.maxMp)*100}%"></div></div>
-        <div class="stat-row">{t('atb')}: {Math.floor(enemy.atb)}%</div>
-        <div class="bar-container atb"><div class="atb-fill" style="width: {enemy.atb}%"></div></div>
+        {#if enemy.lastDamage > 0}
+          <span class="damage-pop sprite-damage">-{enemy.lastDamage}</span>
+        {/if}
       </div>
     {/each}
   </div>
@@ -134,48 +140,50 @@
 
       <!-- Center: Action Bar -->
       <div class="action-bar-container">
-        <div class="flasks-row">
-          <div class="flask-slot hp-flask" on:click={useHpFlask}>
-            {#if player.hpFlask}
-              <div class="flask-fill" style="height: {(player.hpFlask.currentCharges / (player.hpFlask.maxCharges || 1)) * 100}%"></div>
-              <span class="flask-charges">{player.hpFlask.currentCharges}</span>
-            {/if}
-            <span class="flask-key">1</span>
-          </div>
-          <div class="flask-slot mp-flask" on:click={useMpFlask}>
-            {#if player.mpFlask}
-              <div class="flask-fill" style="height: {(player.mpFlask.currentCharges / (player.mpFlask.maxCharges || 1)) * 100}%"></div>
-              <span class="flask-charges">{player.mpFlask.currentCharges}</span>
-            {/if}
-            <span class="flask-key">2</span>
-          </div>
-        </div>
-        
-        <!-- 技能欄位現在支援拖放 -->
-        <div class="skill-slots">
-          {#each ['Q', 'W', 'E', 'R', 'T'] as key, i}
-            <div 
-              class="skill-slot" 
-              class:active={gameState === 'ACTION_SELECT'}
-              class:using={gameState === 'BURST' && activeBurstKey === key}
-              class:prompt-white={!equippedSkills[key]}
-              class:prompt-yellow={gameState === 'ACTION_SELECT' && equippedSkills[key]}
-              class:insufficient-mp={equippedSkills[key] && equippedSkills[key].mp && player.mp < equippedSkills[key].mp}
-              on:click={() => onOpenSkills(key)}
-              on:contextmenu|preventDefault={() => onRemoveSkill(key)}
-              on:mouseenter={(e) => showTooltip(equippedSkills[key], e)}
-              on:mousemove={moveTooltip}
-              on:mouseleave={hideTooltip}
-              on:dragover|preventDefault
-              on:drop={(e) => {
-                const skillData = JSON.parse(e.dataTransfer.getData('skill'));
-                onDropSkill(key, skillData);
-              }}>
-              <span class="key">{key}</span>
-              <span class="slot-index">{i + 1}</span>
-              <span class="label">{equippedSkills[key] ? equippedSkills[key].icon : '-'}</span>
+        <div class="controls-row">
+          <div class="flasks-row">
+            <div class="flask-slot hp-flask" on:click={useHpFlask}>
+              {#if player.hpFlask}
+                <div class="flask-fill" style="height: {(player.hpFlask.currentCharges / (player.hpFlask.maxCharges || 1)) * 100}%"></div>
+                <span class="flask-charges">{player.hpFlask.currentCharges}</span>
+              {/if}
+              <span class="flask-key">1</span>
             </div>
-          {/each}
+            <div class="flask-slot mp-flask" on:click={useMpFlask}>
+              {#if player.mpFlask}
+                <div class="flask-fill" style="height: {(player.mpFlask.currentCharges / (player.mpFlask.maxCharges || 1)) * 100}%"></div>
+                <span class="flask-charges">{player.mpFlask.currentCharges}</span>
+              {/if}
+              <span class="flask-key">2</span>
+            </div>
+          </div>
+          
+          <!-- 技能欄位 -->
+          <div class="skill-slots">
+            {#each ['Q', 'W', 'E', 'R', 'T'] as key, i}
+              <div 
+                class="skill-slot" 
+                class:active={gameState === 'ACTION_SELECT'}
+                class:using={gameState === 'BURST' && activeBurstKey === key}
+                class:prompt-white={!equippedSkills[key]}
+                class:prompt-yellow={gameState === 'ACTION_SELECT' && equippedSkills[key]}
+                class:insufficient-mp={equippedSkills[key] && equippedSkills[key].mp && player.mp < equippedSkills[key].mp}
+                on:click={() => onOpenSkills(key)}
+                on:contextmenu|preventDefault={() => onRemoveSkill(key)}
+                on:mouseenter={(e) => showTooltip(equippedSkills[key], e)}
+                on:mousemove={moveTooltip}
+                on:mouseleave={hideTooltip}
+                on:dragover|preventDefault
+                on:drop={(e) => {
+                  const skillData = JSON.parse(e.dataTransfer.getData('skill'));
+                  onDropSkill(key, skillData);
+                }}>
+                <span class="key">{key}</span>
+                <span class="slot-index">{i + 1}</span>
+                <span class="label">{equippedSkills[key] ? equippedSkills[key].icon : '-'}</span>
+              </div>
+            {/each}
+          </div>
         </div>
 
         <!-- Experience Bar -->
@@ -263,19 +271,80 @@
   }
 
   .enemies-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 110px); /* 縮減每行高度從 140px 到 110px */
+    gap: 5px; /* 縮減間距 */
     width: 100%;
-    justify-content: space-around;
-    margin-bottom: 20px;
-    position: relative; 
+    margin-bottom: 5px;
+    position: relative;
     align-items: center;
-    min-height: 240px;
+    justify-items: center;
+    min-height: 340px; /* 總高度縮減約 100px */
   }
-  .monster-wrapper { text-align: center; transition: all 0.5s; }
+  .monster-wrapper { 
+    text-align: center; 
+    transition: all 0.5s; 
+    width: 100%;
+  }
   .monster-wrapper.dead { opacity: 0; transform: scale(0.5) translateY(100px); }
   .monster-wrapper.hit, .player-visual-wrapper.hit { animation: shake 0.15s infinite, flash 0.15s ease-out; }
   .monster-wrapper.attacking { animation: lunge 0.4s ease-out; z-index: 5; }
   .monster-wrapper.target-success { animation: target-flash 0.2s ease-out; }
+
+  /* --- 怪物階級特效增強 --- */
+  .tier-magic .monster-icon {
+    animation: magic-glow 2s infinite alternate ease-in-out;
+    filter: drop-shadow(0 0 8px var(--tier-color));
+  }
+  @keyframes magic-glow {
+    from { filter: drop-shadow(0 0 5px var(--tier-color)); }
+    to { filter: drop-shadow(0 0 15px var(--tier-color)) brightness(1.2); }
+  }
+
+  .tier-rare .monster-icon {
+    animation: rare-shimmer 1.5s infinite alternate ease-in-out;
+    filter: drop-shadow(0 0 12px var(--tier-color));
+  }
+  @keyframes rare-shimmer {
+    0% { transform: scale(1); filter: drop-shadow(0 0 8px var(--tier-color)); }
+    100% { transform: scale(1.05); filter: drop-shadow(0 0 20px var(--tier-color)) brightness(1.3); }
+  }
+
+  .tier-unique .monster-icon {
+    animation: unique-pulse 1s infinite alternate cubic-bezier(0.45, 0.05, 0.55, 0.95);
+    filter: drop-shadow(0 0 20px var(--tier-color));
+  }
+  @keyframes unique-pulse {
+    0% { transform: scale(1); filter: drop-shadow(0 0 15px var(--tier-color)); }
+    100% { transform: scale(1.1); filter: drop-shadow(0 0 35px var(--tier-color)) brightness(1.4); }
+  }
+
+  /* 讓血條邊框也有對應光暈 */
+  .bar-container.hp-main { box-shadow: 0 0 10px rgba(0,0,0,0.5), 0 0 5px var(--tier-color); }
+
+  /* Unique Monster (Boss) 佔滿 3x3 網格 */
+  .monster-wrapper.unique {
+    grid-column: 1 / span 3;
+    grid-row: 1 / span 3;
+    width: 100%;
+    height: 335px; /* 適配新的網格高度 (3x110 + 2x5 gap) */
+    display: flex;
+    flex-direction: column;
+    justify-content: center; 
+    align-items: center;    /* 水平置中 */
+    gap: 10px;              /* 稍微縮小間距 */
+    position: relative;
+    z-index: 5;
+  }
+  .monster-wrapper.unique .monster-icon { font-size: 7rem; } /* 稍微縮小 Boss 圖示，釋放空間 */
+  .monster-wrapper.unique .bar-container.hp-main { 
+    width: 450px; height: 30px; margin: 0; z-index: 10;
+  }
+  .monster-wrapper.unique .hp-text-overlay { font-size: 1.4rem; padding: 0 15px; }
+  .monster-wrapper.unique .hp-text-overlay .name-base { font-size: 1.2rem; }
+  .monster-wrapper.unique .hp-text-overlay .hp-text { font-size: 1rem; }
+  .monster-wrapper.unique .sprite-damage { font-size: 4rem; left: 50%; top: 50%; }
 
   /* --- 強化版屬性攻擊特效 --- */
 
@@ -340,13 +409,11 @@
   /* 獨立選擇框樣式 */
   .selection-frame {
     position: absolute;
-    width: 160px;
-    height: 230px;
     border: 2px solid yellow;
     box-shadow: 0 0 15px rgba(255, 255, 0, 0.5), inset 0 0 10px rgba(255, 255, 0, 0.3);
     top: 50%;
     transform: translate(-50%, -50%); /* 改為 -50% 達成真正的垂直置中 */
-    transition: left 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: left 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), top 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), width 0.25s ease, height 0.25s ease;
     pointer-events: none;
     z-index: 10;
     border-radius: 4px;
@@ -359,10 +426,10 @@
     flex-direction: column;
     align-items: center;
     width: 100%;
-    margin-top: 20px;
+    margin-top: 0px; /* 縮減玩家區與怪物區的間距 */
   }
 
-  .player-visual-wrapper { text-align: center; transition: transform 0.2s ease-out; margin-bottom: 10px; }
+  .player-visual-wrapper { text-align: center; transition: transform 0.2s ease-out; margin-bottom: 5px; }
   .player-visual-wrapper.attacking { transform: translateY(-40px) scale(1.1); }
   
   .player-sprite-container { position: relative; display: inline-block; }
@@ -420,9 +487,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
   }
-  .flasks-row { display: flex; gap: 12px; }
+  .controls-row { display: flex; align-items: center; gap: 15px; }
+  .flasks-row { display: flex; gap: 8px; }
   .flask-slot {
     width: 34px; height: 50px;
     border: 1px solid #aaa; /* 提高邊框亮度 */
@@ -544,45 +612,61 @@
     z-index: 20;
     white-space: nowrap;
   }
-  .heal-pop { color: #00ff00 !important; }
-  .mp-pop { 
-    color: #3498db !important; 
-    margin-left: 45px !important; /* 增加偏移量，避免與 HP 回復數值重疊 */
-  }
 
-  .monster-name-display { 
+  /* 怪物血條與名稱整合樣式 */
+  .bar-container.hp-main { 
+    width: 110px; 
+    flex-shrink: 0;
+    height: 20px; /* 增加高度以容納文字 */
+    background: #1a1a1a; 
+    border: 1px solid var(--tier-color, #444); /* 使用階級顏色作為邊框 */
+    margin: 2px auto; 
+    border-radius: 2px; 
+    overflow: hidden; 
+    position: relative; /* 允許內部元素絕對定位 */
+    display: flex; /* 用於置中文本 */
+    align-items: center;
+    justify-content: center;
+  }
+  .hp-fill { 
+    position: absolute; /* 讓血條填充作為背景層 */
+    top: 0; left: 0; 
+    height: 100%; 
+    background: linear-gradient(to bottom, #e22, #800); /* 垂直漸層增加質感 */
+    transition: width 0.3s; 
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.5); 
+    z-index: 1; /* 確保在文字下方 */
+  }
+  .hp-text-overlay { /* 包含名稱和血量的疊加層 */
+    position: relative; /* 確保在血條填充上方 */
+    z-index: 2;
+    display: flex; justify-content: space-between; align-items: center;
+    width: 100%; padding: 0 5px; box-sizing: border-box;
     font-weight: bold; 
-    color: var(--tier-color, #fff); 
-    margin-bottom: 8px; 
-    min-height: 2.5em; /* 調整高度以容納類族與名稱 */
-    display: flex; 
-    flex-direction: column; /* 垂直排列 */
-    align-items: center; 
-    justify-content: center; 
-    padding: 0 5px; 
-    text-align: center;
-    line-height: 1.1; /* 縮小行間距 */
+    color: #fff;
+    font-size: 0.75rem;
+    text-shadow: 1px 1px 1px #000, -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000; /* 四向陰影確保清晰度 */
   }
-  .name-race { font-size: 0.7rem; opacity: 0.8; text-transform: uppercase; }
-  .name-affix { 
-    font-size: 0.65rem; 
-    color: #aaa; /* 詞綴使用較淡顏色 */
-    word-break: break-all; /* 避免過長詞綴衝出邊框 */
+  .name-base { 
+    color: #fff; /* 名稱改為白色，不再與紅色血條衝突 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 65%;
+    font-size: 0.7rem; /* 調整字體大小以適應 */
   }
-  .name-base { font-size: 0.9rem; margin-top: 2px; }
+  .hp-text { font-size: 0.6rem; opacity: 0.9; color: #fff; } /* 確保血量數值為白色 */
 
   .letter.correct { color: #fff; text-shadow: 0 0 5px #fff; }
 
-  .stat-row { text-align: left; width: 100px; margin: 0 auto; font-size: 0.7rem; }
-  .monster-sprite { position: relative; display: inline-block; margin-bottom: 5px; }
+  .monster-sprite { position: relative; display: inline-block; margin-top: 0px; margin-bottom: 5px; } /* 調整怪物圖示位置 */
   .monster-icon { 
     font-size: 3rem; 
     filter: drop-shadow(0 0 5px var(--tier-color, transparent)); 
     transition: transform 0.2s; 
   }
   
-  .bar-container { width: 100px; height: 4px; background: #000; border: 1px solid #fff; margin: 4px auto; }
-  .hp-fill, .atb-fill, .mp-fill { height: 100%; background: #fff; transition: width 0.3s; }
+  .atb-fill, .mp-fill { height: 100%; background: #fff; transition: width 0.3s; }
 
   /* 傷害數值彈出樣式 */
   .damage-pop {
@@ -592,6 +676,11 @@
     position: absolute;
     animation: damage-float 1s forwards;
     pointer-events: none;
+  }
+  .heal-pop { color: #00ff00 !important; }
+  .mp-pop { 
+    color: #3498db !important; 
+    margin-left: 45px !important; /* 增加偏移量，避免與 HP 回復數值重疊 */
   }
 
   /* 連擊數顯示樣式 */

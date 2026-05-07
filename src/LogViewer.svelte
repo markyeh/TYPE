@@ -86,7 +86,7 @@
   .log-entry span.white  { color: #fff; font-weight: bold; }
   .log-entry span.magic  { color: #3498db; font-weight: bold; }
   .log-entry span.rare   { color: #f1c40f; font-weight: bold; }
-  .log-entry span.unique { color: #9b59b6; font-weight: bold; }
+  .log-entry span.unique { color: #d35400; font-weight: bold; }
 
   .log-entry.latest { 
     filter: brightness(1.3);
