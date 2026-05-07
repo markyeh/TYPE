@@ -30,20 +30,20 @@
     : `left: ${((selectedIndex % 3) * 33.33) + 16.66}%; top: ${Math.floor(selectedIndex / 3) * 33.33 + 16.66}%; width: 30%; height: 30%;`
   ) : "";
 
+  // 階級色彩映射表
+  const tierColors = {
+    white: '#fff',
+    magic: '#3498db',
+    rare: '#f1c40f',
+    unique: '#d35400'
+  };
+
   let hoveredSkill = null;
   let tooltipPos = { x: 0, y: 0 };
-
-  function showTooltip(skill, e) {
-    if (!skill) return;
-    hoveredSkill = skill;
-    tooltipPos = { x: e.clientX, y: e.clientY };
-  }
-  function moveTooltip(e) {
-    tooltipPos = { x: e.clientX, y: e.clientY };
-  }
-  function hideTooltip() {
-    hoveredSkill = null;
-  }
+  
+  const showTooltip = (skill, e) => { if(skill) { hoveredSkill = skill; tooltipPos = { x: e.clientX, y: e.clientY }; } };
+  const moveTooltip = (e) => { tooltipPos = { x: e.clientX, y: e.clientY }; };
+  const hideTooltip = () => { hoveredSkill = null; };
 </script>
 
 <div class="battle-scene">
@@ -66,17 +66,13 @@
 
     {#each enemies as enemy}
       <div 
-        class="monster-wrapper" 
+        class="monster-wrapper tier-{enemy.wordType}" 
         class:dead={enemy.hp <= 0} 
         class:hit={enemy.isHit}
         class:attacking={enemy.isAttacking}
         class:target-success={enemy.isTargetSuccess}
         class:unique={enemy.wordType === 'unique'}
-        class:tier-white={enemy.wordType === 'white'}
-        class:tier-magic={enemy.wordType === 'magic'}
-        class:tier-rare={enemy.wordType === 'rare'}
-        class:tier-unique={enemy.wordType === 'unique'}
-        style="--tier-color: {enemy.wordType === 'white' ? '#fff' : (enemy.wordType === 'magic' ? '#3498db' : (enemy.wordType === 'rare' ? '#f1c40f' : '#d35400'))};">
+        style="--tier-color: {tierColors[enemy.wordType] || '#fff'};">
         <div class="bar-container hp-main">
           <div class="hp-fill" style="width: {(enemy.hp/enemy.maxHp)*100}%"></div>
           <div class="hp-text-overlay">

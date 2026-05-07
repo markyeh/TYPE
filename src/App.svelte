@@ -31,47 +31,49 @@
     let skillDb = null; // 技能數據庫
     let lastClickedSkillSlotKey = null; // 追蹤最後點擊的技能欄位
     let equippedSkills = { // 裝備中的技能映射
-      Q: null,
-      W: null,
-      E: null,
-      R: null,
-      T: null
+      Q: null, W: null, E: null, R: null, T: null
     };
 
-    // --- 藥水邏輯 (提升位置以確保編譯引用安全) ---
-    function useHpFlask() {
-      if (player.hpFlask && player.hpFlask.currentCharges > 0) {
-        player.hpFlask.currentCharges--;
-        const amount = player.hpFlask.restoreAmount;
-        player.hp = Math.min(player.maxHp, player.hp + amount);
-        player.lastHeal = amount;
+    // --- 輔助函數：獲取初始玩家狀態 ---
+    function getInitialPlayerState(isDev = false) {
+      const hp = isDev ? (gameConfig.devmode?.playerInitialHp || 1000) : (gameConfig.player?.initialHp || 100);
+      const mp = isDev ? (gameConfig.devmode?.playerInitialMp || 1000) : (gameConfig.player?.initialMp || 50);
+      return {
+        hp, maxHp: hp, mp, maxMp: mp,
+        atb: 0, speed: gameConfig.player?.speed || 0.8,
+        isHit: false, isAttacking: false, selectedAction: null,
+        lastDamage: 0, lastHeal: 0, lastMpRegen: 0,
+        hpFlask: { ...gameConfig.flaskConfig, currentCharges: gameConfig.flaskConfig?.hpFlaskMaxCharges || 3, restoreAmount: gameConfig.flaskConfig?.hpFlaskRestoreAmount || 50 },
+        mpFlask: { ...gameConfig.flaskConfig, currentCharges: gameConfig.flaskConfig?.mpFlaskMaxCharges || 3, restoreAmount: gameConfig.flaskConfig?.mpFlaskRestoreAmount || 50 }
+      };
+    }
+
+    // --- 藥水邏輯 ---
+    function useFlask(type) {
+      const flask = player[`${type}Flask`];
+      if (flask && flask.currentCharges > 0) {
+        flask.currentCharges--;
+        const amount = flask.restoreAmount;
+        const prop = type === 'hp' ? 'hp' : 'mp';
+        const maxProp = type === 'hp' ? 'maxHp' : 'maxMp';
+        const effectProp = type === 'hp' ? 'lastHeal' : 'lastMpRegen';
+        
+        player[prop] = Math.min(player[maxProp], player[prop] + amount);
+        player[effectProp] = amount;
         player = player;
-        addLog(t('flaskUsed', t('hp')), 'info');
+        
+        addLog(t('flaskUsed', t(type)), 'info');
         setTimeout(() => { 
-          player.lastHeal = 0; 
+          player[effectProp] = 0; 
           player = player; 
         }, gameConfig.combat?.visualEffectDuration || 1000);
       } else {
-        addLog(t('flaskEmpty', t('hp')), 'info');
+        addLog(t('flaskEmpty', t(type)), 'info');
       }
     }
 
-    function useMpFlask() {
-      if (player.mpFlask && player.mpFlask.currentCharges > 0) {
-        player.mpFlask.currentCharges--;
-        const amount = player.mpFlask.restoreAmount;
-        player.mp = Math.min(player.maxMp, player.mp + amount);
-        player.lastMpRegen = amount;
-        player = player;
-        addLog(t('flaskUsed', t('mp')), 'info');
-        setTimeout(() => { 
-          player.lastMpRegen = 0; 
-          player = player; 
-        }, gameConfig.combat?.visualEffectDuration || 1000);
-      } else {
-        addLog(t('flaskEmpty', t('mp')), 'info');
-      }
-    }
+    const useHpFlask = () => useFlask('hp');
+    const useMpFlask = () => useFlask('mp');
 
     // --- 技能處理 ---
     function handleRemoveSkill(slot) {
@@ -96,15 +98,19 @@
     // --- Dev Mode 狀態反應 ---
     // 當 devMode 改變時，動態調整玩家的 HP/MP 上限
     $: if (devMode) {
-      player.maxHp = gameConfig.devmode?.playerInitialHp || 1000;
-      player.maxMp = gameConfig.devmode?.playerInitialMp || 1000;
-      player = player;
+      const devPlayerState = getInitialPlayerState(true);
+      player.maxHp = devPlayerState.maxHp;
+      player.maxMp = devPlayerState.maxMp;
+      player.hp = Math.min(player.hp, player.maxHp); // 確保當前 HP 不超過新上限
+      player.mp = Math.min(player.mp, player.maxMp); // 確保當前 MP 不超過新上限
+      player = player; // 觸發 Svelte 更新
     } else if (isLoaded) {
-      player.maxHp = gameConfig.player?.initialHp || 100;
-      player.maxMp = gameConfig.player?.initialMp || 50;
+      const normalPlayerState = getInitialPlayerState(false);
+      player.maxHp = normalPlayerState.maxHp;
+      player.maxMp = normalPlayerState.maxMp;
       player.hp = Math.min(player.hp, player.maxHp);
       player.mp = Math.min(player.mp, player.maxMp);
-      player = player;
+      player = player; // 觸發 Svelte 更新
     }
 
     let gameStartTime = Date.now();
@@ -164,6 +170,7 @@
       const currentSelected = enemies.find(e => e.id === selectedMonsterId);
       if (aliveEnemies.length > 0 && (!currentSelected || currentSelected.hp <= 0)) {
         selectedMonsterId = aliveEnemies.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr)).id;
+        console.log("Reactive: selectedMonsterId auto-set to", selectedMonsterId);
       }
     }
 
@@ -321,16 +328,14 @@
       
       // 初始化 devMode
       devMode = gameConfig.devmode?.enabled ?? false;
-
-      // 使用 gameConfig 初始化玩家狀態
-      player.hp = devMode ? (gameConfig.devmode?.playerInitialHp || 1000) : (gameConfig.player?.initialHp || 100);
-      player.maxHp = devMode ? (gameConfig.devmode?.playerInitialHp || 1000) : (gameConfig.player?.initialHp || 100);
-      player.mp = devMode ? (gameConfig.devmode?.playerInitialMp || 1000) : (gameConfig.player?.initialMp || 50);
-      player.maxMp = devMode ? (gameConfig.devmode?.playerInitialMp || 1000) : (gameConfig.player?.initialMp || 50);
-      player.speed = gameConfig.player?.speed || 0.8;
+      player = getInitialPlayerState(devMode);
       burstMaxTime = gameConfig.burstMode?.maxTime || 5000;
-      player = player; // 強制觸發 player 物件的反應性更新
       spawnMonsters();
+      // 確保 selectedMonsterId 在初始怪物生成後被設定
+      const initialAliveEnemies = enemies.filter(e => e.hp > 0); // 確保在 spawnMonsters 之後
+      if (initialAliveEnemies.length > 0) {
+        selectedMonsterId = initialAliveEnemies[0].id; // 預設選擇第一個活著的怪物
+      }
       const timer = setInterval(() => {
         if (isLoaded && gameState !== 'PAUSED' && gameState !== 'GAME_OVER') { // 暫停或結束時停止 ATB
           updateATB();
@@ -489,8 +494,8 @@
         const chargeSpeed = devMode ? player.speed * atbMultiplier : player.speed;
         player.atb += chargeSpeed;
         if (player.atb >= 100) {
-          player.atb = 100;
-          gameState = 'ACTION_SELECT'; // 進入行動選擇狀態
+          player.atb = 100; // 確保 ATB 不會超過 100
+          gameState = 'ACTION_SELECT'; // 進入行動選擇狀態 (這會觸發 BattleScene 的 class:active)
           addLog(t('playerTurn'), 'info');
         }
       }
@@ -549,21 +554,8 @@
       gameState = 'BATTLE'; // 重置遊戲狀態
       gameScore = 0;
       isBossMode = false;
-      enemies = []; // 清空現有怪物，防止 ID 累加與排版錯誤
-      player = {
-        hp: devMode ? (gameConfig.devmode?.playerInitialHp || 1000) : gameConfig.player?.initialHp,
-        maxHp: devMode ? (gameConfig.devmode?.playerInitialHp || 1000) : gameConfig.player?.initialHp,
-        mp: devMode ? (gameConfig.devmode?.playerInitialMp || 1000) : gameConfig.player?.initialMp,
-        maxMp: devMode ? (gameConfig.devmode?.playerInitialMp || 1000) : gameConfig.player?.initialMp,
-        atb: 0, speed: gameConfig.player?.speed || 0.8, isHit: false,
-        isAttacking: false,
-        selectedAction: null,
-        lastDamage: 0,
-        lastHeal: 0,
-        lastMpRegen: 0,
-        hpFlask: { currentCharges: 3, maxCharges: 3, restoreAmount: 50 },
-        mpFlask: { currentCharges: 3, maxCharges: 3, restoreAmount: 50 }
-      };
+      enemies = [];
+      player = getInitialPlayerState(devMode);
       spawnMonsters();
       addLog(t('gameRestarted'));
       gameStartTime = Date.now();
@@ -591,44 +583,25 @@
       const pressedKey = e.key;
       const upperKey = e.key.toUpperCase();
 
-      // 切換日誌 (熱鍵 0)
-      if (pressedKey === keys.toggleLog) {
-        showLog = !showLog;
-        return;
-      }
+      // 基本 UI 切換
+      if (pressedKey === keys.toggleLog) { showLog = !showLog; return; }
+      if (pressedKey === keys.toggleSkills) { showSkillsWindow = !showSkillsWindow; return; }
+      if (pressedKey === keys.pause) { togglePause(); return; }
 
-      // 切換技能視窗 (熱鍵 9)
-      if (pressedKey === keys.toggleSkills) {
-        showSkillsWindow = !showSkillsWindow;
-        return;
-      }
-
-      // 藥水熱鍵 (1/2)
-      if (pressedKey === keys.hpFlask) {
-        e.preventDefault();
-        useHpFlask();
-        return;
-      }
-      if (pressedKey === keys.mpFlask) {
-        e.preventDefault();
-        useMpFlask();
-        return;
-      }
+      // 藥水快捷鍵
+      if (pressedKey === keys.hpFlask) { e.preventDefault(); useHpFlask(); return; }
+      if (pressedKey === keys.mpFlask) { e.preventDefault(); useMpFlask(); return; }
 
       // 切換幫助 (熱鍵 ?)
       if (pressedKey === keys.toggleHelp || (pressedKey === '/' && e.shiftKey && keys.toggleHelp === '?')) {
+        e.preventDefault();
         showHelp = !showHelp;
-        if (showHelp && gameState !== 'PAUSED') {
+        if (showHelp) {
           previousState = gameState;
           gameState = 'PAUSED';
         } else if (!showHelp && gameState === 'PAUSED' && previousState !== 'PAUSED') {
           gameState = previousState;
         }
-        return;
-      }
-
-      if (pressedKey === keys.pause) {
-        togglePause();
         return;
       }
 

@@ -19,15 +19,10 @@
   let inputEl;
   let wordElements = []; // 用於儲存所有單字元素的引用
 
-  // 動態計算捲動偏移量：根據當前單字在容器中的頂部偏移 (offsetTop)
+  // 滾動偏移計算
   $: scrollY = wordElements[currentWordIndex] ? wordElements[currentWordIndex].offsetTop : 0;
-
-  // 當進入 BURST 模式或更新時，強制聚焦輸入框
-  afterUpdate(() => {
-    if (gameState === 'BURST' && inputEl && document.activeElement !== inputEl) {
-      inputEl.focus();
-    }
-  });
+  
+  afterUpdate(() => { if (gameState === 'BURST' && inputEl) inputEl.focus(); });
 </script>
 
 <div class="ui-panel">
