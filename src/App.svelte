@@ -5,6 +5,7 @@
     import BattleScene from './BattleScene.svelte';
     import ModalOverlay from './ModalOverlay.svelte';
     import UIPanel from './UIPanel.svelte';
+    import HelperOverlay from './HelperOverlay.svelte';
     import SkillSidebar from './SkillSidebar.svelte';
   
     // --- 遊戲資料定義 ---
@@ -257,7 +258,14 @@
             combo: "combo",
             flaskUsed: (type) => `${type} Flask used!`,
             flaskEmpty: (type) => `${type} Flask is empty!`,
-            bossApproachingMessage: "Boss is approaching! Prepare for battle!"
+            bossApproachingMessage: "Boss is approaching! Prepare for battle!",
+            log: "LOG",
+            skills: "SKILLS",
+            logHeader: "MESSAGE LOG",
+            skillsHeader: "SKILLS REPOSITORY",
+            clear: "CLEAR",
+            currentLoadout: "CURRENT LOADOUT",
+            availableSkills: "AVAILABLE SKILLS"
         },
         zh: {
             gameLogInitializing: "正在初始化單字庫...",
@@ -307,22 +315,28 @@
             combo: "連擊",
             flaskUsed: (type) => `${type} 藥水已使用！`,
             flaskEmpty: (type) => `${type} 藥水已空！`,
-            bossApproachingMessage: "Boss 正在逼近！準備戰鬥！"
+            bossApproachingMessage: "Boss 正在逼近！準備戰鬥！",
+            log: "訊息日誌",
+            skills: "技能庫",
+            logHeader: "訊息日誌",
+            skillsHeader: "技能庫",
+            clear: "清除",
+            currentLoadout: "目前裝備",
+            availableSkills: "可用技能"
         }
     };
 
-    function t(key, ...args) {
+    $: t = (key, ...args) => {
         const text = translations[currentLanguage][key];
         if (typeof text === 'function') {
             return text(...args);
         }
         return text || `MISSING_TRANSLATION[${key}]`;
-    }
+    };
 
-    // Set initial gameLog based on default language
-    addLog(t('gameLogInitializing'));
-  
     onMount(async () => {
+      // 將初始化日誌移至此處，確保 t 函數已經由 Svelte 的反應式機制初始化
+      addLog(t('gameLogInitializing'));
       await loadGameConfig(); // 確保 gameConfig 在其他依賴它的函數之前載入
       await loadAllDictionaries();
       
@@ -954,14 +968,25 @@
   <svelte:window on:keydown={handleGlobalKeyDown} />
   
   <Header 
-    {t} {devMode} {currentLanguage} 
-    onToggleDev={() => devMode = !devMode} 
+    {t} {currentLanguage} {showLog} {showSkillsWindow}
+    hotkeys={gameConfig.hotkeys || {}}
+    onToggleLog={() => showLog = !showLog}
+    onToggleSkills={onToggleSkills}
+    onToggleHelp={() => {
+      showHelp = !showHelp;
+      if (showHelp && gameState !== 'PAUSED') {
+        previousState = gameState;
+        gameState = 'PAUSED';
+      } else if (!showHelp && gameState === 'PAUSED') {
+        gameState = previousState;
+      }
+    }}
     onSetLanguage={(lang) => currentLanguage = lang} 
   />
 
   <div class="game-viewport">
     {#if showLog}
-      <LogViewer {logHistory} {gameState} onClear={clearLogs} />
+      <LogViewer {logHistory} {gameState} {t} onClear={clearLogs} />
     {/if}
 
     <main class="game-container">
@@ -971,10 +996,8 @@
           onTogglePause={togglePause} 
           onRestart={restartGame}
           {finalResults}
-          {showLog}
-          {showHelp} hotkeys={gameConfig.hotkeys || {}}
-          onToggleLog={() => showLog = !showLog}
-          onToggleHelp={() => showHelp = !showHelp}
+          {showLog} {showHelp}
+          hotkeys={gameConfig.hotkeys || {}}
         />
 
         <BattleScene {enemies} {player} {gameState} {selectedMonsterId} {t} {currentLanguage} {showComboDisplay} {currentComboDisplayCount} {currentWpm} {isBossApproaching} {gameScore} {useHpFlask} {useMpFlask} {equippedSkills} {activeBurstKey} hotkeys={gameConfig.hotkeys || {}} onDropSkill={handleAssignSkill} onRemoveSkill={handleRemoveSkill} onOpenSkills={(slotKey) => { showSkillsWindow = true; lastClickedSkillSlotKey = slotKey; }} />
@@ -993,7 +1016,18 @@
     </main>
 
     {#if showSkillsWindow}
-      <SkillSidebar {skillDb} {equippedSkills} {currentLanguage} {lastClickedSkillSlotKey} skillSlots={gameConfig.hotkeys?.skillSlots || []} hotkeys={gameConfig.hotkeys || {}} onDropSkill={handleAssignSkill} onRemoveSkill={handleRemoveSkill} onToggleSkills={onToggleSkills} onSelectSlot={(key) => lastClickedSkillSlotKey = key} />
+      <SkillSidebar {skillDb} {equippedSkills} {currentLanguage} {t} {lastClickedSkillSlotKey} skillSlots={gameConfig.hotkeys?.skillSlots || []} hotkeys={gameConfig.hotkeys || {}} onDropSkill={handleAssignSkill} onRemoveSkill={handleRemoveSkill} onToggleSkills={onToggleSkills} onSelectSlot={(key) => lastClickedSkillSlotKey = key} />
+    {/if}
+
+    {#if showHelp}
+      <HelperOverlay 
+        {t} 
+        hotkeys={gameConfig.hotkeys || {}} 
+        onClose={() => {
+          showHelp = false;
+          if (gameState === 'PAUSED' && previousState !== 'PAUSED') gameState = previousState;
+        }} 
+      />
     {/if}
   </div>
   

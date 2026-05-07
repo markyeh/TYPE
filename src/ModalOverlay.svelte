@@ -5,8 +5,6 @@
   export let onRestart;
   export let showLog;
   export let showHelp;
-  export let onToggleLog;
-  export let onToggleHelp;
   export let finalResults = { time: 0, wpm: 0 };
   export let hotkeys = {};
 </script>
@@ -25,27 +23,8 @@
       {:else}
         <h1>{t('gamePaused')}</h1>
         <button on:click={onTogglePause}>{t('continueGame')}</button>
-        
-        <div class="menu-options">
-          <button class="toggle-btn" on:click={onToggleLog}>
-            {showLog ? 'CLOSE LOG' : 'OPEN LOG'} ({hotkeys.toggleLog || '0'})
-          </button>
-          <button class="toggle-btn" on:click={onToggleHelp}>
-            {showHelp ? 'HIDE HELP' : 'SHOW HELP'} ({hotkeys.toggleHelp || '?'})
-          </button>
-        </div>
       {/if}
       <button on:click={onRestart}>{t('restartGame')}</button>
-
-      {#if showHelp && gameState === 'PAUSED'}
-        <div class="embedded-help">
-          <h3>{t('helpTitle')}</h3>
-          <div class="help-grid">
-            <p>{t('helpTarget')}</p>
-            <p>{t('helpAttack')}</p>
-          </div>
-        </div>
-      {/if}
     </div>
   </div>
 {/if}

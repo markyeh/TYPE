@@ -5,6 +5,7 @@
   export let onRemoveSkill;
   export let onToggleSkills; // 用於關閉視窗
   export let lastClickedSkillSlotKey; // 接收最後點擊的技能欄位
+  export let t;
   export let onSelectSlot; // 用於切換選中的欄位
   export let currentLanguage;
   export let skillSlots = ['Q', 'W', 'E', 'R', 'T']; // 改為由 prop 傳入
@@ -30,12 +31,12 @@
 
 <div class="skill-sidebar">
   <div class="sidebar-header">
-    SKILLS REPOSITORY
+    {t('skillsHeader')}
     <button class="close-x-btn" on:click={onToggleSkills} title="Close [{hotkeys.toggleSkills || '9'}]">×</button>
   </div>
   
   <div class="equipped-section">
-    <div class="section-title">CURRENT LOADOUT</div>
+    <div class="section-title">{t('currentLoadout')}</div>
     <div class="loadout-grid">
       {#each skillSlots as key, i}
         <div class="loadout-slot" 
@@ -64,7 +65,7 @@
   </div>
 
   <div class="repo-section">
-    <div class="section-title">AVAILABLE SKILLS</div>
+    <div class="section-title">{t('availableSkills')}</div>
     <div class="repo-scroll">
       {#if skillDb}
         {#each Object.entries(skillDb.skills) as [catId, list]}

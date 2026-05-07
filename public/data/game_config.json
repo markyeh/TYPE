@@ -76,9 +76,9 @@
     "atbSpeedMultiplier": 5,
     "damageMultiplier": 10,
     "scoreMap": {
-      "white": 1,
-      "magic": 3,
-      "rare": 6,
+      "white": 5,
+      "magic": 10,
+      "rare": 20,
       "unique": 0
     }
   }

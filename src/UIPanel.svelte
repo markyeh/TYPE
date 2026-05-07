@@ -28,9 +28,12 @@
 <div class="ui-panel">
   <!-- Stage Progress Bar 移至頂層，確保永遠顯示 -->
   <div class="progress-section">
-    <div class="progress-text">STAGE PROGRESS: {gameScore}%</div>
-    <div class="progress-bar-container">
+    <div class="bar-container progress-main">
       <div class="progress-fill" style="width: {gameScore}%"></div>
+      <div class="bar-text-overlay">
+        <span>STAGE PROGRESS</span>
+        <span>{gameScore}%</span>
+      </div>
       {#if gameScore >= 100}
         <div class="boss-ready">BOSS READY</div>
       {/if}
@@ -40,13 +43,17 @@
   <div class="input-area">
     {#if gameState === 'BURST'}
       <div class="burst-container">
-        <!-- Burst Mode Timer Bar -->
-        <div class="timer-bar" style="width: {(burstTimeLeft/burstMaxTime)*100}%"></div>
-        <div class="timer-text" style="margin-bottom: 0;">
-          {(burstTimeLeft / 1000).toFixed(1)}s
-          {#if burstBonusText}
-            <span class="bonus-hint">{burstBonusText}</span>
-          {/if}
+        <div class="bar-container timer-main">
+          <div class="timer-fill" style="width: {(burstTimeLeft/burstMaxTime)*100}%"></div>
+          <div class="bar-text-overlay">
+            <span>BURST MODE</span>
+            <span>
+              {(burstTimeLeft / 1000).toFixed(1)}s
+              {#if burstBonusText}
+                <span class="bonus-hint">{burstBonusText}</span>
+              {/if}
+            </span>
+          </div>
         </div>
         <div class="word-display-container" style="--lines-to-display: {linesToDisplay}; --line-height-val: 1.3em; --row-gap: 0.3em; --words-per-line: {wordsPerLine};">
           <div class="word-lines" style="transform: translateY(-{scrollY}px)">
@@ -109,45 +116,61 @@
   @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 
   .burst-container { text-align: center; width: 100%; }
-  .timer-bar { height: 4px; background: #fff; margin: 0 0 5px 0; transition: width 0.1s linear; }
-  .timer-text { font-size: 0.9rem; color: #fff; margin-bottom: 2px; font-weight: bold; }
-  .bonus-hint { color: #f1c40f; margin-left: 8px; animation: floatUp 0.8s ease-out forwards; position: absolute; }
-  @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
   .progress-section {
     display: flex;
     flex-direction: column;
     align-items: center;
     margin-bottom: 5px; /* 縮減間距 */
-  }
-  .progress-text {
-    font-size: 0.6rem;
-    color: #888;
-    margin-bottom: 2px; /* 縮減間距 */
-    letter-spacing: 1px;
-  }
-  .progress-bar-container {
     width: 100%;
-    height: 4px;
-    background: #222;
-    border: 1px solid #444;
-    position: relative;
-    overflow: hidden;
   }
+
+  /* 統一進度條容器樣式 (參考 HP Bar) */
+  .bar-container {
+    width: 100%; height: 20px; background: #1a1a1a; border: 1px solid #444;
+    border-radius: 2px; overflow: hidden; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .bar-text-overlay {
+    position: relative; z-index: 2; display: flex; justify-content: space-between;
+    align-items: center; width: 100%; padding: 0 10px; box-sizing: border-box;
+    font-weight: bold; color: #fff; font-size: 0.75rem;
+    text-shadow: 1px 1px 1px #000, -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000;
+  }
+
   .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #3498db, #f1c40f);
+    position: absolute; top: 0; left: 0; height: 100%;
+    background: linear-gradient(90deg, #1e3a8a, #3498db, #f1c40f);
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1;
   }
+
+  .timer-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    background: rgba(255, 255, 255, 0.3); /* 半透明白色，不影響文字閱讀 */
+    transition: width 0.1s linear;
+    z-index: 1;
+  }
+
+  .bonus-hint { 
+    color: #f1c40f; margin-left: 8px; 
+    animation: floatUp 0.8s ease-out forwards; 
+    position: absolute; white-space: nowrap;
+    right: 50px;
+  }
+  @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
+
   .boss-ready {
     position: absolute;
     top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(155, 89, 182, 0.8);
     color: #fff;
-    font-size: 0.5rem;
+    font-size: 0.7rem;
     display: flex; align-items: center; justify-content: center;
     font-weight: bold;
     animation: blink 0.8s infinite;
+    z-index: 3;
   }
   @keyframes blink {
     0%, 100% { opacity: 1; }
