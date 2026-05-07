@@ -697,9 +697,9 @@
     function moveToNextWord() {
       currentWordIndex++;
       checkScroll();
-      // 檢查單字量是否足夠，少於 10 個就自動補貨
-      if (currentBurstWords.length - currentWordIndex < 10) {
-        addBurstWords(20);
+      // 提高緩衝閾值（剩餘 30 個即補貨）並增加補貨量 (60 個)，確保流暢度
+      if (currentBurstWords.length - currentWordIndex < 30) {
+        addBurstWords(60);
       }
     }
 
@@ -744,7 +744,6 @@
   
   <Header 
     {t} {devMode} {currentLanguage} 
-    {gameScore}
     onToggleDev={() => devMode = !devMode} 
     onSetLanguage={(lang) => currentLanguage = lang} 
   />
@@ -771,6 +770,7 @@
 
         <UIPanel 
           {gameState} {t} 
+          {gameScore}
           {burstTimeLeft} {burstMaxTime} 
           {burstBonusText} {comboCount}
           {currentBurstWords} bind:currentWordInput {currentWordIndex} 
@@ -806,7 +806,7 @@
 
     .game-container {
       width: 850px;
-      height: 650px;
+      height: 750px; /* 增加總高度 */
       background: #000;
       border: 1px solid #fff;
       display: flex;

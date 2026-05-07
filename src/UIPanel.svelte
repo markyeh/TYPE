@@ -5,6 +5,7 @@
   export let burstTimeLeft;
   export let burstMaxTime;
   export let burstBonusText; // 接收獎勵文字
+  export let gameScore; // 接收地圖進度
   
   // Monkeytype 相關 props
   export let currentBurstWords = [];
@@ -26,6 +27,17 @@
 </script>
 
 <div class="ui-panel">
+  <!-- Stage Progress Bar 移至頂層，確保永遠顯示 -->
+  <div class="progress-section">
+    <div class="progress-text">STAGE PROGRESS: {gameScore}%</div>
+    <div class="progress-bar-container">
+      <div class="progress-fill" style="width: {gameScore}%"></div>
+      {#if gameScore >= 100}
+        <div class="boss-ready">BOSS READY</div>
+      {/if}
+    </div>
+  </div>
+
   <div class="input-area">
     {#if gameState === 'ACTION_SELECT'}
       <div class="action-menu">
@@ -37,6 +49,7 @@
       </div>
     {:else if gameState === 'BURST'}
       <div class="burst-container">
+        <!-- Burst Mode Timer Bar -->
         <div class="timer-bar" style="width: {(burstTimeLeft/burstMaxTime)*100}%"></div>
         <div class="timer-text">
           {(burstTimeLeft / 1000).toFixed(1)}s
@@ -91,22 +104,68 @@
 
 <style>
   .ui-panel {
-    height: 180px; 
+    height: 180px; /* 面板本身也稍微加高，確保空間充裕 */
     display: flex; 
     flex-direction: column;
     flex-shrink: 0;
     padding: 10px 20px; gap: 10px; background: rgba(255,255,255,0.05); box-sizing: border-box;
   }
-  .input-area { flex: 1; display: flex; justify-content: center; align-items: center; }
+  .input-area {
+    flex: 1; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; /* 在空間足夠後，恢復置中對齊會比較美觀 */
+  }
   .targeting-status { font-size: 1.2rem; color: #fff; animation: pulse 1.5s infinite; }
   @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
   .action-menu { font-size: 1.2rem; }
   .key-hint { background: #fff; color: #000; padding: 2px 6px; margin-right: 5px; }
   .burst-container { text-align: center; width: 100%; }
-  .timer-bar { height: 4px; background: #fff; margin-bottom: 5px; transition: width 0.1s linear; }
+  .timer-bar { height: 4px; background: #fff; margin: 0 0 5px 0; transition: width 0.1s linear; }
   .timer-text { font-size: 0.9rem; color: #fff; margin-bottom: 2px; font-weight: bold; }
   .bonus-hint { color: #f1c40f; margin-left: 8px; animation: floatUp 0.8s ease-out forwards; position: absolute; }
   @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
+
+  .progress-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .progress-text {
+    font-size: 0.6rem;
+    color: #888;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  .progress-bar-container {
+    width: 100%;
+    height: 4px;
+    background: #222;
+    border: 1px solid #444;
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3498db, #f1c40f);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .boss-ready {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(155, 89, 182, 0.8);
+    color: #fff;
+    font-size: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold;
+    animation: blink 0.8s infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
   .burst-word .word-display { font-size: 1.6rem; font-weight: bold; }
   .letter.correct { color: #fff; }
   .letter.incorrect { color: #ff4d4d; font-weight: 900; }
