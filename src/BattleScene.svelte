@@ -9,6 +9,8 @@
   export let showComboDisplay; // 接收連擊數顯示狀態
   export let currentComboDisplayCount; // 接收當前連擊數
   export let currentWpm = 0; // 接收即時 WPM
+  export let isStageStarting = false; // 新增關卡開始狀態
+  export let stageMessage = ""; // 新增關卡訊息
   export let isBossApproaching = false; // 接收 Boss 登場狀態
   export let useHpFlask; // 從 App.svelte 傳遞過來的函數
   export let useMpFlask; // 從 App.svelte 傳遞過來的函數
@@ -52,6 +54,14 @@
     <div class="boss-warning-overlay" transition:fade={{duration: 200}}>
       <div class="warning-text">WARNING</div>
       <div class="warning-sub">BOSS APPROACHING</div>
+    </div>
+  {/if}
+
+  <!-- 關卡開始提示 -->
+  {#if isStageStarting}
+    <div class="stage-start-overlay" transition:fade={{duration: 300}}>
+      <div class="stage-text">{stageMessage}</div>
+      <div class="stage-sub">PREPARE TO FIGHT</div>
     </div>
   {/if}
 
@@ -266,6 +276,32 @@
   @keyframes danger-flash {
     0%, 100% { background: rgba(139, 0, 0, 0.4); }
     50% { background: rgba(255, 0, 0, 0.2); }
+  }
+
+  /* 關卡開始特效 */
+  .stage-start-overlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+  }
+  .stage-text {
+    font-size: 5rem;
+    font-weight: 900;
+    color: #f1c40f;
+    text-shadow: 0 0 30px rgba(241, 196, 15, 0.8);
+    letter-spacing: 15px;
+    animation: stage-zoom 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .stage-sub { font-size: 1.5rem; color: #fff; margin-top: 10px; opacity: 0.8; }
+  @keyframes stage-zoom {
+    0% { transform: scale(0.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
   }
 
   .enemies-row {

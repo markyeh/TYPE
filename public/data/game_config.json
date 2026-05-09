@@ -1,4 +1,7 @@
 {
+  "autoMode": {
+    "enabled": true
+  },
   "combat": {
     "baseDamagePerWord": 20,
     "enemyBaseDamage": 10,
@@ -12,9 +15,9 @@
     "bonusTextDuration": 800
   },
   "player": {
-    "initialHp": 100,
-    "initialMp": 50,
-    "speed": 0.8
+    "initialHp": 1000,
+    "initialMp": 500,
+    "speed": 2
   },
   "enemies": {
     "initialMp": 50,
@@ -61,7 +64,7 @@
     "mpFlask": "2",
     "toggleHelp": "?",
     "pause": "Escape",
-    "burstSkillCycle": "Tab",
+    "burstSkillCycle": "Shift",
     "moveLeft": ["H", "ARROWLEFT"],
     "moveRight": ["L", "ARROWRIGHT"],
     "moveUp": ["K", "ARROWUP"],
@@ -69,7 +72,7 @@
     "skillSlots": ["Q", "W", "E", "R", "T"]
   },
   "devmode": {
-    "enabled": true,
+    "enabled": false,
     "playerInitialHp": 1000,
     "playerInitialMp": 1000,
     "regenIntervalTicks": 100,

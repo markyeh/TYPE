@@ -6,6 +6,7 @@
   export let burstMaxTime;
   export let burstBonusText; // 接收獎勵文字
   export let gameScore; // 接收地圖進度
+  export let currentStage; // 接收當前關卡
   
   // Monkeytype 相關 props
   export let currentBurstWords = [];
@@ -31,7 +32,7 @@
     <div class="bar-container progress-main">
       <div class="progress-fill" style="width: {gameScore}%"></div>
       <div class="bar-text-overlay">
-        <span>STAGE PROGRESS</span>
+        <span>STAGE {currentStage} / 10 PROGRESS</span>
         <span>{gameScore}%</span>
       </div>
       {#if gameScore >= 100}

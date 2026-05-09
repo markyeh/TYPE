@@ -24,7 +24,7 @@
         <h1>{t('gamePaused')}</h1>
         <button on:click={onTogglePause}>{t('continueGame')}</button>
       {/if}
-      <button on:click={onRestart}>{t('restartGame')}</button>
+      <button on:click={onRestart}>{t('restartGame')} (Enter)</button>
     </div>
   </div>
 {/if}

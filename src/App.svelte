@@ -20,6 +20,10 @@
     let currentLanguage = 'en'; // 預設語言為英文
     let showLog = false; // 預設關閉日誌
     let gameScore = 0; // 當前地圖進度分數 (0-100)
+    let currentStage = 1; // 當前關卡
+    const totalStages = 10; // 總關卡數
+    let isStageStarting = false; // 新增：關卡開始提示狀態
+    let stageMessage = ""; // 新增：關卡提示文字
     let isBossApproaching = false; // Boss 登場特效狀態
     let showSkillsWindow = false; // 技能視窗顯示狀態
     let showInventoryWindow = false; // 物品欄顯示狀態
@@ -56,6 +60,22 @@
         hpFlask: { ...gameConfig.flaskConfig, currentCharges: gameConfig.flaskConfig?.hpFlaskMaxCharges || 3, restoreAmount: gameConfig.flaskConfig?.hpFlaskRestoreAmount || 50 },
         mpFlask: { ...gameConfig.flaskConfig, currentCharges: gameConfig.flaskConfig?.mpFlaskMaxCharges || 3, restoreAmount: gameConfig.flaskConfig?.mpFlaskRestoreAmount || 50 }
       };
+    }
+
+    // --- 自動模式輔助函數 ---
+    function equipRandomSkills() {
+      if (!skillDb || !gameConfig.autoMode?.enabled) return;
+      // 獲取所有技能類別並隨機排序，確保不重複
+      const categories = Object.keys(skillDb.skills).sort(() => Math.random() - 0.5);
+      const slots = gameConfig.hotkeys.skillSlots || ['Q', 'W', 'E', 'R', 'T'];
+      
+      slots.forEach((slot, i) => {
+        const catName = categories[i % categories.length];
+        const categorySkills = skillDb.skills[catName];
+        const randomSkill = categorySkills[Math.floor(Math.random() * categorySkills.length)];
+        equippedSkills[slot] = randomSkill;
+      });
+      equippedSkills = { ...equippedSkills };
     }
 
     // --- 藥水邏輯 ---
@@ -225,6 +245,15 @@
       handleCorrectWord();
     }
 
+    // 錯誤檢查邏輯：只要輸入的任一字元與目標單字開頭不符，立即重置 Combo
+    $: if (gameState === 'BURST' && currentWordInput.length > 0) {
+      const targetWord = currentBurstWords[currentWordIndex];
+      if (targetWord && !targetWord.toLowerCase().startsWith(currentWordInput.toLowerCase())) {
+        comboCount = 0;
+        currentComboDisplayCount = 0;
+      }
+    }
+
     let visibleWordsStartIndex = 0;
     let burstTimeLeft = 0;
     let burstBonusText = ""; // 新增：獎勵時間提示文字
@@ -380,11 +409,12 @@
       await loadGameConfig(); // 確保 gameConfig 在其他依賴它的函數之前載入
       await loadAllDictionaries();
       
+      if (gameConfig.autoMode?.enabled) equipRandomSkills();
       // 初始化 devMode
       devMode = gameConfig.devmode?.enabled ?? false;
       player = getInitialPlayerState(devMode);
       burstMaxTime = gameConfig.burstMode?.maxTime || 5000;
-      spawnMonsters();
+      spawnMonsters(true);
       // 確保 selectedMonsterId 在初始怪物生成後被設定
       const initialAliveEnemies = enemies.filter(e => e.hp > 0); // 確保在 spawnMonsters 之後
       if (initialAliveEnemies.length > 0) {
@@ -506,41 +536,59 @@
       };
     }
 
-    function spawnMonsters() {
+    function spawnMonsters(isInitial = false) {
       if (isBossMode) {
         enemies = [generateMonster(Date.now(), 'unique')];
         selectedMonsterId = enemies[0].id;
         return;
       }
 
+      if (isInitial) {
+        isStageStarting = true;
+        stageMessage = `STAGE ${currentStage}`;
+        setTimeout(() => { isStageStarting = false; }, 2000);
+      }
+
       const maxSlots = gameConfig.enemies?.maxEnemies || 9;
-      // 建立 9 個基礎插槽以維持 3x3 網格佈局穩定性
-      // 即使是空的插槽也需要基本的結構以防止 BattleScene 渲染錯誤
-      let newEnemies = Array.from({ length: maxSlots }, (_, i) => ({
-        id: Date.now() + i,
-        hp: 0, maxHp: 1, 
-        nameParts: { base: { en: '', zh: '' } },
-        wordType: 'white',
-        atb: 0, speed: 0
-      }));
+     
+      // 確保 enemies 陣列已初始化，若為空則建立空插槽
+      if (enemies.length === 0) {
+        enemies = Array.from({ length: maxSlots }, (_, i) => ({
+          id: Date.now() + i,
+          hp: 0, maxHp: 1, 
+          nameParts: { base: { en: '', zh: '' } },
+          wordType: 'white',
+          atb: 0, speed: 0
+        }));
+      }
 
-      // 決定這波怪物的實際數量 (1 到 maxSlots 隨機)
-      const waveSize = Math.floor(Math.random() * maxSlots) + 1;
-      
-      // 從 9 個位置中隨機挑選索引來放置怪物
-      const targetIndices = Array.from({ length: maxSlots }, (_, i) => i)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, waveSize);
+      const emptyIndices = enemies.map((e, i) => e.hp <= 0 ? i : -1).filter(i => i !== -1);
+      const aliveCount = maxSlots - emptyIndices.length;
 
-      // 在選定位置生成怪物，並確保至少有一個精英怪
-      targetIndices.forEach((gridIdx, i) => {
-        const tier = (i === 0) ? (Math.random() < 0.5 ? 'magic' : 'rare') : getRandomTier();
-        newEnemies[gridIdx] = generateMonster(Date.now() + gridIdx, tier);
-      });
+      let numToSpawn = 0;
+      if (isInitial) {
+        // 遊戲開始：生成數量大於一半 (例如 9 個位子，需生成 5~9 隻)
+        const minToSpawn = Math.floor(maxSlots / 2) + 1;
+        numToSpawn = Math.floor(Math.random() * (maxSlots - minToSpawn + 1)) + minToSpawn;
+      } else if (aliveCount < maxSlots / 2) {
+        // 戰鬥中補位：隨機填補空位
+        numToSpawn = Math.floor(Math.random() * emptyIndices.length) + 1;
+      }
 
-      enemies = newEnemies;
-      const firstAlive = enemies.find(e => e.hp > 0);
-      selectedMonsterId = firstAlive ? firstAlive.id : null;
+      if (numToSpawn > 0 && emptyIndices.length > 0) {
+        const spawnAtIndices = emptyIndices.sort(() => Math.random() - 0.5).slice(0, numToSpawn);
+        spawnAtIndices.forEach((idx, i) => {
+          const tier = (isInitial && i === 0) ? (Math.random() < 0.5 ? 'magic' : 'rare') : getRandomTier();
+          enemies[idx] = generateMonster(Date.now() + idx, tier);
+        });
+        enemies = [...enemies];
+      }
+
+      // 確保選中活著的怪物
+      if (!selectedMonsterId || !enemies.find(e => e.id === selectedMonsterId && e.hp > 0)) {
+        const firstAlive = enemies.find(e => e.hp > 0);
+        selectedMonsterId = firstAlive ? firstAlive.id : null;
+      }
     }
   
     function updateATB() {
@@ -570,14 +618,25 @@
         const atbMultiplier = gameConfig.devmode?.atbSpeedMultiplier || 5;
         const chargeSpeed = devMode ? player.speed * atbMultiplier : player.speed;
         player.atb += chargeSpeed;
-        if (player.atb >= 100) {
-        // 只有在場上有活著的敵人時，ATB 滿了才進入行動選擇模式
+
         if (player.atb >= 100 && enemies.filter(e => e.hp > 0).length > 0) {
-          player.atb = 100; // 確保 ATB 不會超過 100
-          gameState = 'ACTION_SELECT'; // 進入行動選擇狀態 (這會觸發 BattleScene 的 class:active)
-          addLog(t('playerTurn'), 'info');
+          player.atb = 100;
+          
+          // 自動模式：ATB 滿自動施放隨機技能
+          if (gameConfig.autoMode?.enabled && gameState !== 'BURST') {
+            const slots = gameConfig.hotkeys.skillSlots;
+            const randomKey = slots[Math.floor(Math.random() * slots.length)];
+            const equipped = equippedSkills[randomKey];
+            
+            player.selectedAction = equipped ? 'S' : 'A';
+            activeBurstKey = randomKey;
+            currentTarget = enemies.find(m => m.id === selectedMonsterId);
+            if (currentTarget) startBurst();
+          } else if (gameState !== 'BURST' && gameState !== 'ACTION_SELECT') {
+            gameState = 'ACTION_SELECT';
+            addLog(t('playerTurn'), 'info');
+          }
         }
-      }
       }
   
       // 敵人 ATB
@@ -591,7 +650,8 @@
     }
   
     function enemyAttack(attacker) {
-      const damage = gameConfig.combat?.enemyBaseDamage || 10;
+      const baseDamage = gameConfig.combat?.enemyBaseDamage || 10;
+      const damage = baseDamage + (currentStage - 1) * 10; // 每一關攻擊力 +10
       // 根據當前語言選擇名稱
       const currentName = attacker[`name_${currentLanguage}`] || attacker.name_en;
 
@@ -633,10 +693,12 @@
       if (bossTimer) clearTimeout(bossTimer); // 強制清除尚未觸發的 Boss 生成
       gameState = 'BATTLE'; // 重置遊戲狀態
       gameScore = 0;
+      currentStage = 1; // 重置關卡
       isBossMode = false;
       enemies = [];
       player = getInitialPlayerState(devMode);
-      spawnMonsters();
+      spawnMonsters(true);
+      if (gameConfig.autoMode?.enabled) equipRandomSkills();
       addLog(t('gameRestarted'));
       gameStartTime = Date.now();
       totalSuccessfulWords = 0;
@@ -706,7 +768,12 @@
         return;
       }
 
-      if (gameState === 'PAUSED' || gameState === 'GAME_OVER') return;
+      if (gameState === 'PAUSED' || gameState === 'GAME_OVER' || gameState === 'VICTORY') {
+        if (pressedKey === 'Enter') {
+          restartGame();
+        }
+        return;
+      }
 
       if (gameState === 'ACTION_SELECT') {
         const aliveEnemies = enemies.filter(e => e.hp > 0);
@@ -864,6 +931,24 @@
         setTimeout(() => { burstBonusText = ""; }, gameConfig.burstMode?.bonusTextDuration || 800);
         // --- 每次成功連擊都增加時間 ---
 
+        // Combo 恢復 HP/MP 邏輯
+        const recoveryAmount = comboCount + 1;
+        player.hp = Math.min(player.maxHp, player.hp + recoveryAmount);
+        player.mp = Math.min(player.maxMp, player.mp + recoveryAmount);
+        player.lastHeal = recoveryAmount;
+        player.lastMpRegen = recoveryAmount;
+        setTimeout(() => {
+          player.lastHeal = 0;
+          player.lastMpRegen = 0;
+          player = player;
+        }, gameConfig.combat?.visualEffectDuration || 1000);
+
+        // 自動模式：打完一個字自動切換技能
+        if (gameConfig.autoMode?.enabled) {
+          const slots = gameConfig.hotkeys.skillSlots;
+          activeBurstKey = slots[Math.floor(Math.random() * slots.length)];
+        }
+
         currentComboDisplayCount = comboCount + 1; // comboCount 還沒加，所以這裡加1
         // 移除原有的 setTimeout 邏輯，讓顯示狀態由 endBurst 統一關閉
 
@@ -878,40 +963,62 @@
           player = player;
         }, gameConfig.combat?.actionExecutionDelay || 200);
 
-        // 立即計算傷害數值，以便後續視覺特效與傷害套用使用
         const currentSkill = equippedSkills[activeBurstKey];
         const hitType = currentSkill?.type || 'normal';
+        const aoeCount = (player.selectedAction === 'S' && currentSkill?.aoe) ? currentSkill.aoe : 1;
 
-        // 修正：技能屬性名稱應為 atk (來自 skills.json)，並將其轉為倍率 (例如 140 轉為 1.4)
         let multiplier = player.selectedAction === 'S' ? (currentSkill?.atk ? currentSkill.atk / 100 : 2) : 1;
         const dmgMultiplier = gameConfig.devmode?.damageMultiplier || 10;
         if (devMode) multiplier *= dmgMultiplier;
-        // 修正：增加括號確保先取得基礎傷害再進行倍率乘法
         const damagePerWord = (gameConfig.combat?.baseDamagePerWord || 20) * multiplier;
 
-        // 觸發視覺特效
-        currentTarget.isHit = true;
-        currentTarget.lastHitType = hitType; // 補上這一行：傳遞屬性類型給目標
-        currentTarget.lastDamage = damagePerWord;
-        const hitTarget = currentTarget;
-        setTimeout(() => {
-          hitTarget.isHit = false;
-          hitTarget.lastHitType = null; // 結束特效時清除屬性標記
-          hitTarget.lastDamage = 0;
-          enemies = enemies;
-        }, gameConfig.combat?.visualEffectDuration || 1000);
+        // 獲取所有攻擊目標 (包含主目標 + 其他隨機活著的怪物)
+        let targets = [currentTarget];
+        if (aoeCount > 1) {
+          const otherAlive = enemies.filter(e => e.hp > 0 && e.id !== currentTarget.id);
+          // 根據技能 AOE 數量挑選額外目標
+          targets = [...targets, ...otherAlive.slice(0, aoeCount - 1)];
+        }
 
-        // 套用傷害
-        currentTarget.hp = Math.max(0, currentTarget.hp - damagePerWord);
-        enemies = enemies; // 觸發 Svelte 反應式更新
+        const scoreMap = (devMode && gameConfig.devmode?.scoreMap)
+          ? gameConfig.devmode.scoreMap
+          : gameConfig.enemies?.scoreMap;
+
+        // 對所有目標施加傷害與特效
+        targets.forEach(target => {
+          target.isHit = true;
+          target.lastHitType = hitType;
+          target.lastDamage = damagePerWord;
+          target.hp = Math.max(0, target.hp - damagePerWord);
+          
+          if (target.hp <= 0) {
+            const points = scoreMap[target.wordType] || 0;
+            gameScore = Math.min(100, gameScore + points);
+          }
+
+          const tRef = target;
+          setTimeout(() => {
+            tRef.isHit = false;
+            tRef.lastHitType = null;
+            tRef.lastDamage = 0;
+            enemies = enemies;
+          }, gameConfig.combat?.visualEffectDuration || 1000);
+        });
+
+        enemies = enemies;
+        const maxSlots = gameConfig.enemies?.maxEnemies || 9;
+        const aliveEnemiesCount = enemies.filter(e => e.hp > 0).length;
+
+        // 共通補怪邏輯：不論主目標是否死亡，只要 AOE 擊殺導致場上數量低於一半就補怪
+        if (!isBossMode && gameScore < 100 && aliveEnemiesCount < (maxSlots / 2)) {
+          setTimeout(() => {
+            if (gameState !== 'VICTORY' && !isBossMode) {
+              spawnMonsters();
+            }
+          }, gameConfig.enemies?.respawnDelay || 1000);
+        } 
 
         if (currentTarget.hp <= 0) {
-          // 分數邏輯
-          const scoreMap = (devMode && gameConfig.devmode?.scoreMap)
-            ? gameConfig.devmode.scoreMap
-            : gameConfig.enemies?.scoreMap;
-          const points = scoreMap[currentTarget.wordType] || 0;
-          gameScore = Math.min(100, gameScore + points);
 
           // 檢查是否進入 Boss 房
           if (gameScore >= 100 && !isBossMode) {
@@ -940,35 +1047,38 @@
           }
           // 擊敗 Boss 結算邏輯 (檢查是否真的擊敗了 Unique 階級的 Boss)
           else if (currentTarget.wordType === 'unique') {
-            const endTime = Date.now();
-            const totalSeconds = Math.max(1, (endTime - gameStartTime) / 1000);
-            finalResults = {
-              time: totalSeconds,
-              wpm: Math.round((totalSuccessfulWords / (totalSeconds / 60)))
-            };
-            gameState = 'VICTORY';
-            clearInterval(burstInterval); // 手動清除，不進入 resetTurn
-            showComboDisplay = false;
-            return;
+            if (currentStage < totalStages) {
+              currentStage++;
+              gameScore = 0;
+              isBossMode = false;
+              enemies = [];
+              spawnMonsters(true);
+              addLog(`--- STAGE ${currentStage} ---`, 'unique');
+              endBurst(); // 結束當前 Burst 回到戰鬥流程
+              return;
+            } else {
+              const endTime = Date.now();
+              const totalSeconds = Math.max(1, (endTime - gameStartTime) / 1000);
+              finalResults = {
+                time: totalSeconds,
+                wpm: Math.round((totalSuccessfulWords / (totalSeconds / 60)))
+              };
+              gameState = 'VICTORY';
+              clearInterval(burstInterval); // 手動清除，不進入 resetTurn
+              showComboDisplay = false;
+              return;
+            }
           }
 
-          const aliveEnemies = enemies.filter(e => e.hp > 0);
-          if (aliveEnemies.length > 0) {
-            // 如果還有怪物，自動切換到下一個目標（HP 最低者）
-            currentTarget = aliveEnemies.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr));
-            selectedMonsterId = currentTarget.id; // 確保黃色框立即移動到新目標
+          const remainingAlive = enemies.filter(e => e.hp > 0);
+          if (remainingAlive.length > 0) {
+            currentTarget = remainingAlive.reduce((prev, curr) => (prev.hp < curr.hp ? prev : curr));
+            selectedMonsterId = currentTarget.id;
             moveToNextWord();
           } else {
-            // 波次清空邏輯：當波次所有敵人都死亡，且未進入 Boss 戰時，生成下一波
-            if (!isBossMode && gameScore < 100) {
-              setTimeout(() => {
-                if (gameState !== 'VICTORY' && !isBossMode) {
-                  spawnMonsters();
-                }
-              }, gameConfig.enemies?.respawnDelay || 1000);
-            }
             endBurst();
           }
+    
         } else {
           moveToNextWord();
         }
@@ -1066,10 +1176,10 @@
           hotkeys={gameConfig.hotkeys || {}}
         />
 
-        <BattleScene {enemies} {player} {gameState} {selectedMonsterId} {t} {currentLanguage} {showComboDisplay} {currentComboDisplayCount} {currentWpm} {isBossApproaching} {gameScore} {useHpFlask} {useMpFlask} {equippedSkills} {activeBurstKey} hotkeys={gameConfig.hotkeys || {}} onDropSkill={handleAssignSkill} onRemoveSkill={handleRemoveSkill} onOpenSkills={(slotKey) => { showSkillsWindow = true; lastClickedSkillSlotKey = slotKey; }} />
+        <BattleScene {enemies} {player} {gameState} {selectedMonsterId} {t} {currentLanguage} {showComboDisplay} {currentComboDisplayCount} {currentWpm} {isStageStarting} {stageMessage} {isBossApproaching} {gameScore} {useHpFlask} {useMpFlask} {equippedSkills} {activeBurstKey} hotkeys={gameConfig.hotkeys || {}} onDropSkill={handleAssignSkill} onRemoveSkill={handleRemoveSkill} onOpenSkills={(slotKey) => { showSkillsWindow = true; lastClickedSkillSlotKey = slotKey; }} />
 
         <UIPanel 
-          {gameState} {t} 
+          {gameState} {t} {currentStage}
           {gameScore}
           {burstTimeLeft} {burstMaxTime} 
           {burstBonusText} {comboCount}
